@@ -15,7 +15,14 @@ export default function OnboardingPage() {
     e.preventDefault()
     setLoading(true)
 
-    // Save to Supabase
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert('Please log in first')
+      window.location.href = '/login'
+      return
+    }
+
     const { data, error } = await supabase
       .from('dogs')
       .insert([
@@ -25,6 +32,7 @@ export default function OnboardingPage() {
           age: age,
           baseline: parseInt(baseline),
           behavior: behavior,
+          user_id: user.id,
         }
       ])
       .select()
@@ -32,11 +40,10 @@ export default function OnboardingPage() {
     setLoading(false)
 
     if (error) {
-        console.error('Error:', error)
-        alert('Error saving: ' + error.message)
-        } else {
-        console.log('Saved:', data)
-        window.location.href = '/dashboard'
+      console.error('Error:', error)
+      alert('Error saving: ' + error.message)
+    } else {
+      window.location.href = '/dashboard'
     }
   }
 
@@ -55,7 +62,7 @@ export default function OnboardingPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Dog's Name
+              Dog&apos;s Name
             </label>
             <input
               type="text"

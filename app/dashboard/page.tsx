@@ -21,10 +21,18 @@ export default function DashboardPage() {
     fetchDogs()
   }, [])
 
-  const fetchDogs = async () => {
+const fetchDogs = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      window.location.href = '/login'
+      return
+    }
+
     const { data, error } = await supabase
       .from('dogs')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (error) {
