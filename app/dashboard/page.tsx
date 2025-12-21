@@ -107,9 +107,12 @@ const fetchDogs = async () => {
                   <p className="text-gray-700">{dog.behavior}</p>
                 </div>
 
-                <button className="w-full bg-emerald-100 text-emerald-700 py-3 rounded-lg font-semibold hover:bg-emerald-200 transition">
-                  View Training Plan →
-                </button>
+                <button 
+  onClick={() => window.location.href = '/mission'}
+  className="w-full bg-emerald-100 text-emerald-700 py-3 rounded-lg font-semibold hover:bg-emerald-200 transition"
+>
+  View Training Plan →
+</button>
               </div>
             ))}
           </div>
