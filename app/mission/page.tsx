@@ -89,6 +89,18 @@ export default function MissionPage() {
     setGenerating(false)
   }
 
+  const handleLogSession = () => {
+    localStorage.setItem('currentMission', JSON.stringify({
+      title: mission?.title,
+      targetMinutes: mission?.targetMinutes,
+      steps: mission?.steps,
+      successLooksLike: mission?.successLooksLike,
+      ownerMood: ownerMood,
+      ownerEnergy: ownerEnergy
+    }))
+    window.location.href = '/log-session'
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -353,7 +365,12 @@ export default function MissionPage() {
             )}
 
             <div className="flex gap-4">
-              <button onClick={() => window.location.href = '/log-session'} className="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-semibold hover:bg-emerald-700 transition">✓ Log This Session</button>
+              <button 
+                onClick={handleLogSession}
+                className="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-semibold hover:bg-emerald-700 transition"
+              >
+                ✓ Log This Session
+              </button>
               <button onClick={() => setShowCheckin(true)} className="bg-gray-200 text-gray-700 px-6 py-4 rounded-xl font-semibold hover:bg-gray-300 transition">🔄</button>
             </div>
           </div>
