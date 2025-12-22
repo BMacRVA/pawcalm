@@ -6,11 +6,18 @@ import { supabase } from '../supabase'
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!agreed) {
+      setMessage('You must agree to the Terms of Service and Privacy Policy')
+      return
+    }
+    
     setLoading(true)
     setMessage('')
 
@@ -68,10 +75,27 @@ export default function SignupPage() {
             />
           </div>
 
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="terms"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-1 w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <label htmlFor="terms" className="text-sm text-gray-600">
+              I agree to the{' '}
+              <a href="/terms" target="_blank" className="text-emerald-600 hover:underline">Terms of Service</a>
+              {' '}and{' '}
+              <a href="/privacy" target="_blank" className="text-emerald-600 hover:underline">Privacy Policy</a>.
+              I understand PawCalm provides AI suggestions, not professional veterinary or training advice.
+            </label>
+          </div>
+
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition disabled:bg-gray-400"
+            disabled={loading || !agreed}
+            className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating Account...' : 'Sign Up'}
           </button>
