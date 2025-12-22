@@ -106,6 +106,8 @@ export default function VideoPlayerPage() {
     )
   }
 
+  const playerUrl = `https://stream.mux.com/${video.mux_playback_id}.m3u8`
+
   return (
     <div className="min-h-screen bg-gray-900">
       <div className="bg-gray-800 border-b border-gray-700">
@@ -117,10 +119,11 @@ export default function VideoPlayerPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
-          <mux-player
-            playback-id={video.mux_playback_id}
-            accent-color="#10b981"
-            style={{ width: '100%', height: '100%' }}
+          <iframe
+            src={`https://player.mux.com/${video.mux_playback_id}`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
           />
           <div className="absolute top-4 right-4 text-white text-sm opacity-50 pointer-events-none">
             {isOwner ? 'Owner View' : 'Trainer View'}
