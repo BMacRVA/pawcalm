@@ -22,6 +22,9 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
+          🚧 Beta - We're actively building PawCalm. Expect bugs & changes!
+        </div>
         {children}
         <Analytics />
       </body>
