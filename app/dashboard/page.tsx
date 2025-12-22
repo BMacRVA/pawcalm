@@ -21,7 +21,7 @@ export default function DashboardPage() {
     fetchDogs()
   }, [])
 
-const fetchDogs = async () => {
+  const fetchDogs = async () => {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -64,13 +64,27 @@ const fetchDogs = async () => {
           </p>
         </div>
 
-        {/* Add Dog Button */}
-        <button
-          onClick={() => window.location.href = '/onboarding'}
-          className="mb-8 bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition"
-        >
-          + Add New Dog
-        </button>
+        {/* Action Buttons */}
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={() => window.location.href = '/onboarding'}
+            className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition"
+          >
+            + Add New Dog
+          </button>
+          <button
+            onClick={() => window.location.href = '/videos'}
+            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 transition"
+          >
+            🎥 Training Videos
+          </button>
+          <button
+            onClick={() => window.location.href = '/progress'}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            📊 Progress
+          </button>
+        </div>
 
         {/* Dogs List */}
         {dogs.length === 0 ? (
@@ -108,11 +122,11 @@ const fetchDogs = async () => {
                 </div>
 
                 <button 
-  onClick={() => window.location.href = '/mission'}
-  className="w-full bg-emerald-100 text-emerald-700 py-3 rounded-lg font-semibold hover:bg-emerald-200 transition"
->
-  View Training Plan →
-</button>
+                  onClick={() => window.location.href = '/mission'}
+                  className="w-full bg-emerald-100 text-emerald-700 py-3 rounded-lg font-semibold hover:bg-emerald-200 transition"
+                >
+                  View Training Plan →
+                </button>
               </div>
             ))}
           </div>
