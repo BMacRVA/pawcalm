@@ -13,6 +13,31 @@ export default function LandingPage() {
     videosAvailable: 0
   });
 
+  // Handle OAuth redirect with hash (access_token in URL)
+  useEffect(() => {
+    const handleAuthRedirect = async () => {
+      if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('access_token')) {
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.user) {
+          const { data: dogs } = await supabase
+            .from('dogs')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .limit(1)
+          
+          if (dogs && dogs.length > 0) {
+            window.location.href = '/dashboard'
+          } else {
+            window.location.href = '/onboarding'
+          }
+        }
+      }
+    }
+    
+    handleAuthRedirect()
+  }, [])
+
   useEffect(() => {
     async function fetchStats() {
       const [dogsResult, sessionsResult, videosResult] = await Promise.all([
