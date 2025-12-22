@@ -24,7 +24,7 @@ export default function SignupPage() {
     if (error) {
       setMessage(error.message)
     } else {
-      setMessage('Check your email for the confirmation link!')
+      window.location.href = '/onboarding'
     }
   }
 
@@ -48,7 +48,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               required
             />
           </div>
@@ -62,7 +62,7 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 6 characters"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               required
               minLength={6}
             />
@@ -78,7 +78,7 @@ export default function SignupPage() {
         </form>
 
         {message && (
-          <p className="mt-4 text-center text-sm text-gray-600">{message}</p>
+          <p className="mt-4 text-center text-sm text-red-600">{message}</p>
         )}
 
         <p className="mt-6 text-center text-gray-600">

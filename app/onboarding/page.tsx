@@ -62,14 +62,14 @@ export default function OnboardingPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Dog&apos;s Name
+              Dog Name
             </label>
             <input
               type="text"
               value={dogName}
               onChange={(e) => setDogName(e.target.value)}
               placeholder="e.g., Max"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               required
             />
           </div>
@@ -83,7 +83,7 @@ export default function OnboardingPage() {
               value={breed}
               onChange={(e) => setBreed(e.target.value)}
               placeholder="e.g., Border Collie Mix"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               required
             />
           </div>
@@ -95,7 +95,7 @@ export default function OnboardingPage() {
             <select
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white"
               required
             >
               <option value="">Select age...</option>
@@ -115,7 +115,7 @@ export default function OnboardingPage() {
               value={baseline}
               onChange={(e) => setBaseline(e.target.value)}
               placeholder="e.g., 5"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               required
             />
           </div>
@@ -128,7 +128,7 @@ export default function OnboardingPage() {
               value={behavior}
               onChange={(e) => setBehavior(e.target.value)}
               placeholder="Describe your dog's behavior..."
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none text-gray-900 bg-white placeholder-gray-400"
               rows={4}
               required
             />
