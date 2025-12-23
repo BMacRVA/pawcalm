@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from './supabase';
-import ExitIntent from './components/ExitIntent';
+import ExitIntent from './components/exitintent';
 
 export default function LandingPage() {
   const [email, setEmail] = useState('');
