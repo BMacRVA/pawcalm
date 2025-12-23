@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from './supabase';
-import ExitIntent from './components/exitintent'
+import ExitIntent from './components/ExitIntent';
 
 export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState({ dogsEnrolled: 0 });
+  const [showMobileDemo, setShowMobileDemo] = useState(false);
 
   useEffect(() => {
     const handleAuthRedirect = async () => {
@@ -120,12 +121,59 @@ export default function LandingPage() {
                   <span><strong>{stats.dogsEnrolled}</strong> dog{stats.dogsEnrolled !== 1 && 's'} enrolled</span>
                 </div>
               )}
+
+              {/* Mobile: Sample mission teaser */}
+              <div className="lg:hidden mt-6">
+                <button
+                  onClick={() => setShowMobileDemo(!showMobileDemo)}
+                  className="w-full max-w-md mx-auto flex items-center justify-between bg-white border border-amber-200 rounded-xl p-4 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-amber-700 rounded-lg flex items-center justify-center text-white text-lg">
+                      📋
+                    </div>
+                    <div>
+                      <p className="font-semibold text-amber-950">See a sample mission</p>
+                      <p className="text-sm text-amber-700/70">What you'll get each day</p>
+                    </div>
+                  </div>
+                  <span className={`text-amber-600 transition-transform ${showMobileDemo ? 'rotate-180' : ''}`}>
+                    ▼
+                  </span>
+                </button>
+
+                {/* Expandable demo */}
+                {showMobileDemo && (
+                  <div className="mt-3 max-w-md mx-auto bg-white rounded-xl border border-amber-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-3 text-white">
+                      <p className="text-amber-200 text-xs">Sample Mission • Day 3</p>
+                      <p className="font-bold">Departure Desensitization</p>
+                    </div>
+                    <div className="p-3 space-y-2">
+                      <div className="flex gap-2 p-2 bg-amber-50 rounded-lg">
+                        <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">1</span>
+                        <p className="text-amber-950 text-sm">Pick up keys, put them down (3x)</p>
+                      </div>
+                      <div className="flex gap-2 p-2 bg-gray-100 rounded-lg opacity-60">
+                        <span className="w-5 h-5 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold">2</span>
+                        <p className="text-gray-600 text-sm">Walk toward the door...</p>
+                      </div>
+                      <div className="flex gap-2 p-2 bg-gray-100 rounded-lg opacity-40">
+                        <span className="w-5 h-5 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold">3</span>
+                        <p className="text-gray-600 text-sm">Full departure practice...</p>
+                      </div>
+                    </div>
+                    <Link href="/signup" className="block p-3 bg-amber-50 border-t border-amber-100 text-center">
+                      <span className="text-amber-700 font-semibold text-sm">Get your personalized plan →</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Right: Demo Card */}
-            <div className="lg:flex-1 max-w-sm mx-auto lg:mx-0 lg:max-w-md">
+            {/* Right: Demo Card - Desktop only */}
+            <div className="hidden lg:block lg:flex-1 max-w-md">
               <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100">
-                {/* Header */}
                 <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-4 text-white">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-amber-200 text-xs font-medium">Sample Mission</span>
@@ -134,7 +182,6 @@ export default function LandingPage() {
                   <h3 className="text-lg font-bold">Departure Desensitization</h3>
                 </div>
 
-                {/* Steps */}
                 <div className="p-4 space-y-2">
                   <div className="flex gap-3 p-3 bg-amber-50 rounded-xl">
                     <div className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
@@ -173,7 +220,6 @@ export default function LandingPage() {
                 </Link>
               </div>
 
-              {/* Progress hint under card */}
               <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
                 <p className="text-green-800 text-sm">
                   📈 <strong>Track progress</strong> — see your dog's anxiety score improve over time
@@ -197,7 +243,6 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* Exit Intent Popup */}
       <ExitIntent />
     </div>
   );
