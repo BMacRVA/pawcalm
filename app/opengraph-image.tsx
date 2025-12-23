@@ -1,74 +1,69 @@
-import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import Script from "next/script";
-import "./globals.css";
+import { ImageResponse } from 'next/og'
 
-export const metadata: Metadata = {
-  title: "PawCalm - AI Dog Separation Anxiety Training",
-  description: "Calm your anxious dog in 5 minutes a day. AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-  keywords: ["dog anxiety", "separation anxiety", "dog training", "pet behavior", "dog calm"],
-  metadataBase: new URL("https://pawcalm.ai"),
-  openGraph: {
-    title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
-    description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-    url: "https://pawcalm.ai",
-    siteName: "PawCalm",
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
-    description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-  },
-};
+export const runtime = 'edge'
+export const alt = 'PawCalm - AI Dog Separation Anxiety Training'
+export const size = { width: 1200, height: 630 }
+export const contentType = 'image/png'
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <head>
-        <Script
-          src="https://cdn.jsdelivr.net/npm/@mux/mux-player@2"
-          strategy="beforeInteractive"
-        />
-      </head>
-      <body className="flex flex-col min-h-screen">
-        <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
-          🚧 Beta - We're actively building PawCalm. Expect bugs & changes!
+export default function Image() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          fontSize: 48,
+          background: '#FDFBF7',
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px',
+        }}
+      >
+        <div style={{ fontSize: 80, marginBottom: 20 }}>🐾</div>
+        <div
+          style={{
+            fontSize: 64,
+            fontWeight: 'bold',
+            color: '#451a03',
+            textAlign: 'center',
+            marginBottom: 20,
+          }}
+        >
+          Calm your anxious dog
         </div>
-        <main className="flex-grow">
-          {children}
-        </main>
-        <footer className="bg-gray-900 text-gray-400 py-8 px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="text-center md:text-left">
-                <p className="text-white font-semibold">🐾 PawCalm</p>
-                <p className="text-sm">AI-assisted dog separation anxiety training</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-4 text-sm">
-                <a href="/terms" className="hover:text-white transition">Terms of Service</a>
-                <a href="/privacy" className="hover:text-white transition">Privacy Policy</a>
-                <a href="/disclaimer" className="hover:text-white transition">Disclaimer</a>
-              </div>
-            </div>
-            <div className="mt-6 pt-6 border-t border-gray-800 text-center text-sm">
-              <p>© 2025 PawCalm. All rights reserved.</p>
-              <p className="mt-2 text-xs text-gray-500">
-                PawCalm provides AI-generated suggestions for informational purposes only. 
-                Not a substitute for professional veterinary or behavioral advice.
-              </p>
-            </div>
-          </div>
-        </footer>
-        <Analytics />
-        <SpeedInsights />
-      </body>
-    </html>
-  );
+        <div
+          style={{
+            fontSize: 48,
+            color: '#d97706',
+            textAlign: 'center',
+            marginBottom: 40,
+          }}
+        >
+          in 5 minutes a day
+        </div>
+        <div
+          style={{
+            fontSize: 28,
+            color: '#92400e',
+            textAlign: 'center',
+          }}
+        >
+          AI-powered daily missions • Free during beta
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 40,
+            fontSize: 24,
+            color: '#b45309',
+          }}
+        >
+          pawcalm.ai
+        </div>
+      </div>
+    ),
+    { ...size }
+  )
 }
