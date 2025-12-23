@@ -227,7 +227,7 @@ export default function CameraSetupPage() {
 
             {selectedCamera !== savedCamera && selectedCamera !== 'none' && (
               <button
-                onClick={() => saveCamera(selectedCamera)}
+                onClick={() => selectedCamera && saveCamera(selectedCamera)}
                 disabled={saving}
                 className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold transition disabled:bg-amber-400"
               >
