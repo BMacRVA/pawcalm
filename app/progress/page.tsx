@@ -9,6 +9,10 @@ type Session = {
   created_at: string
   dog_response: string
   mission_title: string
+  mission_steps: string[]
+  steps_completed: number
+  steps_total: number
+  notes: string
 }
 
 type CuePractice = {
@@ -20,9 +24,7 @@ type CuePractice = {
 type VideoAnalysis = {
   id: string
   created_at: string
-  status: string
   analysis: string
-  triggers_detected: string[]
 }
 
 export default function ProgressPage() {
@@ -31,6 +33,8 @@ export default function ProgressPage() {
   const [cuePractices, setCuePractices] = useState<CuePractice[]>([])
   const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedSession, setExpandedSession] = useState<string | null>(null)
+  const [expandedVideo, setExpandedVideo] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -54,128 +58,60 @@ export default function ProgressPage() {
       setDogName(dog.name)
 
       const [sessionsRes, cuesRes, videosRes] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select('*')
-          .eq('dog_id', dog.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('cue_practices')
-          .select('*')
-          .eq('dog_id', dog.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('video_analyses')
-          .select('*')
-          .eq('dog_id', dog.id)
-          .eq('status', 'analyzed')
-          .order('created_at', { ascending: false })
+        supabase.from('sessions').select('*').eq('dog_id', dog.id).order('created_at', { ascending: false }),
+        supabase.from('cue_practices').select('*').eq('dog_id', dog.id).order('created_at', { ascending: false }),
+        supabase.from('video_analyses').select('*').eq('dog_id', dog.id).eq('status', 'analyzed').order('created_at', { ascending: false })
       ])
 
       if (sessionsRes.data) setSessions(sessionsRes.data)
       if (cuesRes.data) setCuePractices(cuesRes.data)
       if (videosRes.data) setVideoAnalyses(videosRes.data)
     }
-
     setLoading(false)
   }
 
-  // Combined activity for timeline
-  const getTimeline = () => {
-    const items: { type: 'session' | 'cue' | 'video'; date: string; data: any }[] = []
-    
-    sessions.forEach(s => {
-      items.push({ type: 'session', date: s.created_at, data: s })
-    })
-    
-    cuePractices.forEach(c => {
-      items.push({ type: 'cue', date: c.created_at, data: c })
+  const getCueAnalysis = () => {
+    const cueHistory: Record<string, { 
+      name: string
+      total: number
+      calm: number
+      status: 'stressful' | 'working-on' | 'mastered'
+    }> = {}
+
+    const sortedPractices = [...cuePractices].reverse()
+    sortedPractices.forEach(practice => {
+      practice.cues?.forEach(cue => {
+        if (!cueHistory[cue.cue_name]) {
+          cueHistory[cue.cue_name] = { name: cue.cue_name, total: 0, calm: 0, status: 'working-on' }
+        }
+        cueHistory[cue.cue_name].total++
+        if (cue.response === 'calm') cueHistory[cue.cue_name].calm++
+      })
     })
 
-    videoAnalyses.forEach(v => {
-      items.push({ type: 'video', date: v.created_at, data: v })
+    Object.values(cueHistory).forEach(cue => {
+      const calmRate = cue.calm / cue.total
+      if (cue.total >= 2 && calmRate >= 0.7) cue.status = 'mastered'
+      else if (calmRate <= 0.3) cue.status = 'stressful'
     })
-    
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    return cueHistory
   }
 
-  // Calculate stats
-  const totalSessions = sessions.length
-  const totalCuePractices = cuePractices.length
-  const totalVideos = videoAnalyses.length
-
-  const greatSessions = sessions.filter(s => s.dog_response === 'great').length
-  const okSessions = sessions.filter(s => s.dog_response === 'okay').length
-  const struggledSessions = sessions.filter(s => s.dog_response === 'struggled').length
-
-  const totalCuesTested = cuePractices.reduce((sum, cp) => sum + (cp.cues?.length || 0), 0)
-  const calmCues = cuePractices.reduce((sum, cp) => 
-    sum + (cp.cues?.filter(c => c.response === 'calm').length || 0), 0)
-  const anxiousCues = cuePractices.reduce((sum, cp) => 
-    sum + (cp.cues?.filter(c => c.response === 'anxious').length || 0), 0)
-
-  // Video anxiety levels
-  const getAnxietyLevel = (analysis: string): string => {
+  const getVideoAnxiety = (analysis: string): { level: string; emoji: string } => {
     const lower = analysis.toLowerCase()
-    if (lower.includes('none 😎') || lower.includes('level: none')) return 'none'
-    if (lower.includes('mild 😊') || lower.includes('level: mild')) return 'mild'
-    if (lower.includes('moderate 😟') || lower.includes('level: moderate')) return 'moderate'
-    if (lower.includes('severe 😰') || lower.includes('level: severe')) return 'severe'
-    return 'unknown'
+    if (lower.includes('none 😎')) return { level: 'Calm', emoji: '😎' }
+    if (lower.includes('mild 😊')) return { level: 'Mild', emoji: '😊' }
+    if (lower.includes('moderate 😟')) return { level: 'Moderate', emoji: '😟' }
+    return { level: 'Severe', emoji: '😰' }
   }
 
-  const videosByAnxiety = {
-    none: videoAnalyses.filter(v => getAnxietyLevel(v.analysis) === 'none').length,
-    mild: videoAnalyses.filter(v => getAnxietyLevel(v.analysis) === 'mild').length,
-    moderate: videoAnalyses.filter(v => getAnxietyLevel(v.analysis) === 'moderate').length,
-    severe: videoAnalyses.filter(v => getAnxietyLevel(v.analysis) === 'severe').length
-  }
+  const cueAnalysis = getCueAnalysis()
+  const stressful = Object.values(cueAnalysis).filter(c => c.status === 'stressful')
+  const workingOn = Object.values(cueAnalysis).filter(c => c.status === 'working-on')
+  const mastered = Object.values(cueAnalysis).filter(c => c.status === 'mastered')
 
-  // All triggers across videos
-  const allTriggers = videoAnalyses.flatMap(v => v.triggers_detected || [])
-  const triggerCounts = allTriggers.reduce((acc, trigger) => {
-    acc[trigger] = (acc[trigger] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-  const topTriggers = Object.entries(triggerCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-
-  // Calculate streak
-  const calculateStreak = () => {
-    if (sessions.length === 0) return 0
-    
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const sessionDates = sessions.map(s => {
-      const d = new Date(s.created_at)
-      d.setHours(0, 0, 0, 0)
-      return d.getTime()
-    })
-    
-    const uniqueDates = [...new Set(sessionDates)].sort((a, b) => b - a)
-    let streak = 0
-    
-    for (let i = 0; i < uniqueDates.length; i++) {
-      const expected = new Date(today)
-      expected.setDate(expected.getDate() - i)
-      expected.setHours(0, 0, 0, 0)
-      
-      if (uniqueDates[i] === expected.getTime()) {
-        streak++
-      } else if (i === 0 && uniqueDates[i] === expected.getTime() - 86400000) {
-        streak++
-      } else {
-        break
-      }
-    }
-    
-    return streak
-  }
-
-  const streak = calculateStreak()
-  const timeline = getTimeline()
+  const hasData = sessions.length > 0 || Object.keys(cueAnalysis).length > 0 || videoAnalyses.length > 0
 
   if (loading) {
     return (
@@ -186,206 +122,232 @@ export default function ProgressPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
+    <div className="min-h-screen bg-[#FDFBF7] py-6 px-4">
       <div className="max-w-2xl mx-auto">
-        <div className="mb-6">
-          <Link href="/dashboard" className="text-amber-600 hover:underline">← Back to Dashboard</Link>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <Link href="/dashboard" className="text-amber-600 text-sm">← Back</Link>
+          <h1 className="text-xl font-bold text-amber-950">{dogName}'s Progress</h1>
+          <div className="w-12"></div>
         </div>
 
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-amber-950 mb-1">{dogName}'s Progress</h1>
-          <p className="text-amber-800/70">All your training in one place</p>
-        </div>
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          <div className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-amber-600">{streak}</p>
-            <p className="text-xs text-amber-700/70">Streak 🔥</p>
+        {!hasData ? (
+          <div className="bg-white rounded-2xl p-8 border border-amber-100 text-center">
+            <span className="text-4xl mb-3 block">🐕</span>
+            <p className="text-amber-700 mb-4">Complete a session to start tracking</p>
+            <Link href="/mission" className="bg-amber-600 text-white px-6 py-2 rounded-lg font-medium">
+              Start Session
+            </Link>
           </div>
-          <div className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-amber-950">{totalSessions}</p>
-            <p className="text-xs text-amber-700/70">Sessions</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-amber-950">{totalCuePractices}</p>
-            <p className="text-xs text-amber-700/70">Cue Practice</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm text-center">
-            <p className="text-2xl font-bold text-amber-950">{totalVideos}</p>
-            <p className="text-xs text-amber-700/70">Videos</p>
-          </div>
-        </div>
-
-        {/* Session Breakdown */}
-        {totalSessions > 0 && (
-          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm mb-4">
-            <h2 className="font-semibold text-amber-950 mb-3">Session Results</h2>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-green-600">{greatSessions}</p>
-                <p className="text-xs text-green-700">Great 🌟</p>
-              </div>
-              <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-amber-600">{okSessions}</p>
-                <p className="text-xs text-amber-700">Okay 👍</p>
-              </div>
-              <div className="flex-1 bg-red-50 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-600">{struggledSessions}</p>
-                <p className="text-xs text-red-700">Struggled 💪</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Video Analysis Summary */}
-        {totalVideos > 0 && (
-          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm mb-4">
-            <h2 className="font-semibold text-amber-950 mb-3">Video Analysis Summary 🎥</h2>
-            <div className="flex gap-2 mb-4">
-              <div className="flex-1 bg-green-50 rounded-lg p-2 text-center">
-                <p className="text-xl font-bold text-green-600">{videosByAnxiety.none}</p>
-                <p className="text-xs text-green-700">Calm 😎</p>
-              </div>
-              <div className="flex-1 bg-yellow-50 rounded-lg p-2 text-center">
-                <p className="text-xl font-bold text-yellow-600">{videosByAnxiety.mild}</p>
-                <p className="text-xs text-yellow-700">Mild 😊</p>
-              </div>
-              <div className="flex-1 bg-orange-50 rounded-lg p-2 text-center">
-                <p className="text-xl font-bold text-orange-600">{videosByAnxiety.moderate}</p>
-                <p className="text-xs text-orange-700">Moderate 😟</p>
-              </div>
-              <div className="flex-1 bg-red-50 rounded-lg p-2 text-center">
-                <p className="text-xl font-bold text-red-600">{videosByAnxiety.severe}</p>
-                <p className="text-xs text-red-700">Severe 😰</p>
-              </div>
-            </div>
-            
-            {topTriggers.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-amber-700 mb-2">Common Triggers:</p>
-                <div className="flex flex-wrap gap-2">
-                  {topTriggers.map(([trigger, count]) => (
-                    <span key={trigger} className="bg-red-50 text-red-700 text-xs px-2 py-1 rounded-full">
-                      {trigger} ({count})
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {videosByAnxiety.none > 0 && videosByAnxiety.none === totalVideos && (
-              <div className="mt-3 bg-green-100 rounded-lg p-3 text-center">
-                <p className="text-green-800 text-sm font-medium">
-                  🎉 {dogName} has been calm in all video analyses! Amazing progress!
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Cue Progress */}
-        {totalCuesTested > 0 && (
-          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm mb-6">
-            <h2 className="font-semibold text-amber-950 mb-3">Cue Desensitization</h2>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-amber-700">Calm responses</span>
-                  <span className="font-medium text-green-600">{calmCues} / {totalCuesTested}</span>
-                </div>
-                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div 
-                    className="bg-green-500 h-full rounded-full"
-                    style={{ width: `${totalCuesTested > 0 ? (calmCues / totalCuesTested) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-            {anxiousCues > 0 && (
-              <p className="text-sm text-amber-700/70 mt-3">
-                {anxiousCues} cue{anxiousCues > 1 ? 's' : ''} still causing anxiety — keep practicing!
+        ) : (
+          <>
+            {/* Sessions */}
+            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
+              <p className="text-sm font-medium text-amber-950 mb-3">
+                Sessions <span className="font-normal text-amber-500">({sessions.length})</span>
               </p>
-            )}
-          </div>
-        )}
+              
+              {sessions.length === 0 ? (
+                <p className="text-amber-400 text-sm">No sessions yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.slice(0, 5).map((s) => (
+                    <div key={s.id}>
+                      <button
+                        onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
+                            s.dog_response === 'great' ? 'bg-green-100' :
+                            s.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
+                          }`}>
+                            {s.dog_response === 'great' ? '😊' : s.dog_response === 'okay' ? '😐' : '😟'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-amber-950 truncate">
+                              {s.mission_title || 'Training Session'}
+                            </p>
+                            <p className="text-xs text-amber-500">
+                              {new Date(s.created_at).toLocaleDateString('en-US', { 
+                                month: 'short', day: 'numeric' 
+                              })}
+                              {s.steps_total > 0 && ` • ${s.steps_completed}/${s.steps_total} steps`}
+                            </p>
+                          </div>
+                          <span className="text-amber-400 text-xs">
+                            {expandedSession === s.id ? '▲' : '▼'}
+                          </span>
+                        </div>
+                      </button>
+                      
+                      {expandedSession === s.id && (
+                        <div className="ml-11 mt-1 p-3 bg-amber-50 rounded-lg text-sm space-y-2">
+                          <p className="text-amber-700">
+                            <span className="font-medium">Result:</span>{' '}
+                            {s.dog_response === 'great' ? '😊 Did great!' : 
+                             s.dog_response === 'okay' ? '😐 Okay with some stress' : '😟 Struggled'}
+                          </p>
+                          
+                          {/* Show steps if available */}
+                          {s.mission_steps && s.mission_steps.length > 0 && (
+                            <div>
+                              <p className="text-amber-700 font-medium text-xs mb-1">Steps tried:</p>
+                              <ul className="text-xs text-amber-600 space-y-1">
+                                {s.mission_steps.map((step, i) => (
+                                  <li key={i} className="flex items-start gap-2">
+                                    <span className={i < s.steps_completed ? 'text-green-500' : 'text-amber-400'}>
+                                      {i < s.steps_completed ? '✓' : '○'}
+                                    </span>
+                                    <span className={i < s.steps_completed ? '' : 'opacity-60'}>
+                                      {step}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {s.notes && (
+                            <p className="text-amber-600 text-xs italic border-t border-amber-200 pt-2">
+                              "{s.notes}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {sessions.length > 5 && (
+                    <p className="text-xs text-amber-500 text-center pt-2">
+                      +{sessions.length - 5} more sessions
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
-        {/* Activity Timeline */}
-        <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm">
-          <h2 className="font-semibold text-amber-950 mb-4">Recent Activity</h2>
-          
-          {timeline.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-amber-700/70 mb-4">No activity yet</p>
-              <Link 
-                href="/mission"
-                className="inline-block bg-amber-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-amber-700 transition"
-              >
-                Start First Session
+            {/* Cue Status */}
+            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
+              <p className="text-sm font-medium text-amber-950 mb-3">Departure Cues</p>
+              
+              {Object.keys(cueAnalysis).length === 0 ? (
+                <p className="text-amber-400 text-sm">Practice cues to identify triggers</p>
+              ) : (
+                <div className="space-y-2">
+                  {stressful.length > 0 && (
+                    <div>
+                      <p className="text-xs text-red-600 mb-1">🔴 Causes stress</p>
+                      <div className="flex flex-wrap gap-1">
+                        {stressful.map(c => (
+                          <span key={c.name} className="bg-red-50 text-red-700 text-xs px-2 py-1 rounded">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {workingOn.length > 0 && (
+                    <div>
+                      <p className="text-xs text-amber-600 mb-1">🟡 Working on</p>
+                      <div className="flex flex-wrap gap-1">
+                        {workingOn.map(c => (
+                          <span key={c.name} className="bg-amber-50 text-amber-700 text-xs px-2 py-1 rounded">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {mastered.length > 0 && (
+                    <div>
+                      <p className="text-xs text-green-600 mb-1">🟢 Mastered</p>
+                      <div className="flex flex-wrap gap-1">
+                        {mastered.map(c => (
+                          <span key={c.name} className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Videos */}
+            {videoAnalyses.length > 0 && (
+              <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
+                <p className="text-sm font-medium text-amber-950 mb-3">
+                  Video Analysis <span className="font-normal text-amber-500">({videoAnalyses.length})</span>
+                </p>
+                <div className="space-y-2">
+                  {videoAnalyses.slice(0, 3).map((v) => {
+                    const { level, emoji } = getVideoAnxiety(v.analysis)
+                    return (
+                      <div key={v.id}>
+                        <button
+                          onClick={() => setExpandedVideo(expandedVideo === v.id ? null : v.id)}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
+                              level === 'Calm' ? 'bg-green-100' :
+                              level === 'Mild' ? 'bg-yellow-100' :
+                              level === 'Moderate' ? 'bg-orange-100' : 'bg-red-100'
+                            }`}>
+                              {emoji}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-amber-950">
+                                {level} anxiety
+                              </p>
+                              <p className="text-xs text-amber-500">
+                                {new Date(v.created_at).toLocaleDateString('en-US', { 
+                                  month: 'short', day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                            <span className="text-amber-400 text-xs">
+                              {expandedVideo === v.id ? '▲' : '▼'}
+                            </span>
+                          </div>
+                        </button>
+                        
+                        {expandedVideo === v.id && (
+                          <div className="ml-11 mt-1 p-3 bg-purple-50 rounded-lg text-sm">
+                            <p className="text-purple-800 text-xs whitespace-pre-line">
+                              {v.analysis.substring(0, 500)}
+                              {v.analysis.length > 500 && '...'}
+                            </p>
+                            <Link 
+                              href="/videos" 
+                              className="text-purple-600 text-xs underline mt-2 inline-block"
+                            >
+                              View full analysis →
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-3 gap-2">
+              <Link href="/mission" className="bg-amber-600 text-white py-3 rounded-xl font-medium text-center text-sm">
+                New Session
+              </Link>
+              <Link href="/departure-practice" className="bg-amber-100 text-amber-700 py-3 rounded-xl font-medium text-center text-sm">
+                Practice Cues
+              </Link>
+              <Link href="/videos" className="bg-purple-100 text-purple-700 py-3 rounded-xl font-medium text-center text-sm">
+                Upload Video
               </Link>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {timeline.slice(0, 15).map((item, i) => (
-                <div key={i} className="flex items-start gap-3 pb-3 border-b border-amber-100 last:border-0">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    item.type === 'session' 
-                      ? item.data.dog_response === 'great' ? 'bg-green-100' 
-                        : item.data.dog_response === 'okay' ? 'bg-amber-100' 
-                        : 'bg-red-100'
-                      : item.type === 'cue'
-                      ? 'bg-blue-100'
-                      : 'bg-purple-100'
-                  }`}>
-                    {item.type === 'session' ? '🎯' : item.type === 'cue' ? '🚪' : '🎥'}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-amber-950">
-                      {item.type === 'session' 
-                        ? item.data.mission_title || 'Training Session'
-                        : item.type === 'cue'
-                        ? `Cue Practice (${item.data.cues?.length || 0} cues)`
-                        : 'Video Analysis'
-                      }
-                    </p>
-                    <p className="text-sm text-amber-700/70">
-                      {item.type === 'session' 
-                        ? `${item.data.dog_response === 'great' ? '🌟 Great' : item.data.dog_response === 'okay' ? '👍 Okay' : '💪 Struggled'}`
-                        : item.type === 'cue'
-                        ? `${item.data.cues?.filter((c: any) => c.response === 'calm').length || 0} calm, ${item.data.cues?.filter((c: any) => c.response === 'anxious').length || 0} anxious`
-                        : `${getAnxietyLevel(item.data.analysis) === 'none' ? '😎 Calm' : getAnxietyLevel(item.data.analysis) === 'mild' ? '😊 Mild' : getAnxietyLevel(item.data.analysis) === 'moderate' ? '😟 Moderate' : '😰 Severe'}`
-                      }
-                      {' • '}
-                      {new Date(item.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* CTAs */}
-        <div className="grid grid-cols-3 gap-3 mt-6">
-          <Link
-            href="/mission"
-            className="bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold text-center transition text-sm"
-          >
-            Session
-          </Link>
-          <Link
-            href="/departure-practice"
-            className="bg-amber-100 hover:bg-amber-200 text-amber-700 py-3 rounded-xl font-semibold text-center transition text-sm"
-          >
-            Cues
-          </Link>
-          <Link
-            href="/videos"
-            className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-3 rounded-xl font-semibold text-center transition text-sm"
-          >
-            Video
-          </Link>
-        </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -90,6 +90,7 @@ export default function LogSessionPage() {
         user_id: user?.id,
         dog_id: dog?.id,
         mission_title: mission?.title || 'Quick Session',
+        mission_steps: mission?.steps || [],
         target_duration: mission?.targetMinutes || 5,
         duration: mission?.targetMinutes || 5, // Could add actual timing later
         steps_completed: stepsCompleted,

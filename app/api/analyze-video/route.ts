@@ -51,7 +51,7 @@ async function extractFrames(videoPath: string, outputDir: string, numFrames: nu
   return frames
 }
 
-async function analyzeFrames(frames: string[], dogName: string): Promise<{ isDog: boolean; analysis: string; triggers: string[] }> {
+async function analyzeFrames(frames: string[], dogName: string): Promise<{ isDog: boolean; analysis: string | null; triggers: string[] }> {
   const frameImages = await Promise.all(
     frames.map(async (framePath) => {
       const buffer = await readFile(framePath)
@@ -92,19 +92,11 @@ If you see a dog, isDog is true. If you see no dog, or only humans/other animals
     verificationResult = { isDog: false, reason: 'Could not verify content' }
   }
 
+  // If no dog detected, return null analysis (will be deleted)
   if (!verificationResult.isDog) {
     return {
       isDog: false,
-      analysis: `## Hmm, Where's the Pup? 🔍
-
-We couldn't spot a dog in this video! To get the best analysis for ${dogName || 'your dog'}, we need to clearly see them in the frame.
-
-**Quick tips for your next video:**
-- Make sure ${dogName || 'your dog'} is visible throughout
-- Try a wider angle that captures their favorite spots
-- Check that lighting is good enough to see clearly
-
-*${verificationResult.reason || 'No dog detected in video frames'}*`,
+      analysis: null,
       triggers: []
     }
   }
@@ -268,6 +260,25 @@ export async function POST(request: Request) {
     console.log('Analyzing frames with AI...')
     const { isDog, analysis, triggers } = await analyzeFrames(frames, dogName)
 
+    // If no dog detected, delete the record
+    if (!isDog) {
+      console.log('No dog detected - deleting video record')
+      
+      await supabase
+        .from('video_analyses')
+        .delete()
+        .eq('id', videoId)
+      
+      await cleanup(tempFiles, tempDirs)
+      
+      return NextResponse.json({ 
+        success: false, 
+        isDog: false, 
+        message: 'No dog detected in video. Please upload a video that shows your dog.' 
+      })
+    }
+
+    // Update database with analysis
     const { error } = await supabase
       .from('video_analyses')
       .update({
@@ -284,30 +295,19 @@ export async function POST(request: Request) {
 
     await cleanup(tempFiles, tempDirs)
 
-    console.log('Analysis complete:', isDog ? 'Dog detected' : 'No dog detected')
+    console.log('Analysis complete: Dog detected and analyzed')
 
-    return NextResponse.json({ success: true, isDog, triggers })
+    return NextResponse.json({ success: true, isDog: true, triggers })
   } catch (error) {
     console.error('Video analysis error:', error)
 
     await cleanup(tempFiles, tempDirs)
 
     if (videoId) {
+      // Delete failed records instead of marking as failed
       await supabase
         .from('video_analyses')
-        .update({ 
-          status: 'failed',
-          analysis: `## Oops! Something Went Wrong 😅
-
-We had trouble analyzing this video. No worries though - this happens sometimes!
-
-**Let's try again:**
-- Make sure your video is MP4, MOV, or WebM format
-- Keep it under 100MB
-- Check that the video plays correctly on your device
-
-Upload another video and we'll give it another shot! 🐕`
-        })
+        .delete()
         .eq('id', videoId)
     }
 
