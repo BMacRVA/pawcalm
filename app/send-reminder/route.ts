@@ -4,7 +4,7 @@ import twilio from 'twilio'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 const twilioClient = twilio(
@@ -14,16 +14,16 @@ const twilioClient = twilio(
 
 export async function POST(request: Request) {
   try {
-    // Verify this is a legitimate cron request (add your own secret)
-    const { authorization } = Object.fromEntries(request.headers)
-    if (authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Verify this is a legitimate cron request
+    const authHeader = request.headers.get('authorization')
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get all dogs with SMS enabled
     const { data: dogs } = await supabase
       .from('dogs')
-      .select('*, sessions(*)')
+      .select('*')
       .eq('sms_enabled', true)
       .not('owner_phone', 'is', null)
 
@@ -31,36 +31,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'No dogs with SMS enabled' })
     }
 
-    const now = new Date()
-    const currentHour = now.getUTCHours()
-    const currentMinute = now.getUTCMinutes()
-
     let sentCount = 0
 
     for (const dog of dogs) {
-      // Check if it's the right time for this user's reminder
-      const [reminderHour, reminderMinute] = (dog.reminder_time || '09:00').split(':').map(Number)
-      
-      // Simple check - within 30 min window (you'd want timezone handling in production)
-      if (Math.abs(currentHour - reminderHour) > 0) continue
+      // Get sessions for this dog
+      const { data: sessions } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('dog_id', dog.id)
+        .order('created_at', { ascending: false })
+
+      const allSessions = sessions || []
 
       // Check if they already did a session today
       const today = new Date().toISOString().split('T')[0]
-      const todaySession = dog.sessions?.find((s: any) => 
+      const todaySession = allSessions.find((s: any) => 
         s.created_at.startsWith(today)
       )
 
       if (todaySession) continue // Already trained today
 
       // Calculate streak
-      const sessions = dog.sessions || []
       let streak = 0
-      const sortedSessions = sessions.sort((a: any, b: any) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-      
-      for (let i = 0; i < sortedSessions.length; i++) {
-        const sessionDate = new Date(sortedSessions[i].created_at)
+      for (let i = 0; i < allSessions.length; i++) {
+        const sessionDate = new Date(allSessions[i].created_at)
         const expectedDate = new Date()
         expectedDate.setDate(expectedDate.getDate() - i - 1)
         
@@ -76,10 +70,10 @@ export async function POST(request: Request) {
       
       if (streak >= 3) {
         message = `🔥 ${dog.name} has a ${streak}-day streak! Don't break it — time for today's 5-min session. https://pawcalm.ai/mission`
-      } else if (sessions.length === 0) {
+      } else if (allSessions.length === 0) {
         message = `Hey! Ready for ${dog.name}'s first training session? It only takes 5 minutes. https://pawcalm.ai/mission`
       } else {
-        const lastSession = sortedSessions[0]
+        const lastSession = allSessions[0]
         const lastResponse = lastSession?.dog_response
         
         if (lastResponse === 'struggled') {
