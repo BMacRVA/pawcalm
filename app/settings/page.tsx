@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [dogId, setDogId] = useState<string | null>(null)
   const [dogName, setDogName] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -40,14 +41,38 @@ export default function SettingsPage() {
     }
   }
 
+  // Format phone for display (123) 456-7890
+  const formatPhoneDisplay = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    if (numbers.length <= 3) return numbers
+    if (numbers.length <= 6) return `(${numbers.slice(0, 3)}) ${numbers.slice(3)}`
+    return `(${numbers.slice(0, 3)}) ${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`
+  }
+
+  // Format phone for Twilio +15551234567
+  const formatPhoneForTwilio = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    if (numbers.length === 10) return `+1${numbers}`
+    if (numbers.length === 11 && numbers.startsWith('1')) return `+${numbers}`
+    return `+${numbers}`
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value
+    const numbers = input.replace(/\D/g, '').slice(0, 10)
+    setPhone(formatPhoneDisplay(numbers))
+  }
+
   const saveSettings = async () => {
     if (!dogId) return
     setSaving(true)
 
+    const formattedPhone = formatPhoneForTwilio(phone)
+
     await supabase
       .from('dogs')
       .update({
-        owner_phone: phone,
+        owner_phone: formattedPhone,
         reminder_time: reminderTime,
         sms_enabled: smsEnabled
       })
@@ -59,25 +84,38 @@ export default function SettingsPage() {
   }
 
   const sendTestSMS = async () => {
-    if (!phone) {
-      alert('Please enter your phone number first')
+    if (!phone || phone.replace(/\D/g, '').length < 10) {
+      alert('Please enter a valid 10-digit phone number')
       return
     }
 
-    const response = await fetch('/api/send-sms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: phone,
-        message: `🐕 Test from PawCalm! Your reminders for ${dogName} are set up. You'll get a daily nudge at ${reminderTime}.`
-      })
-    })
+    setSendingTest(true)
+    const formattedPhone = formatPhoneForTwilio(phone)
 
-    if (response.ok) {
-      alert('Test SMS sent! Check your phone.')
-    } else {
-      alert('Failed to send test SMS. Make sure your phone number is correct.')
+    try {
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: formattedPhone,
+          message: `🐕 Test from PawCalm! Your reminders for ${dogName} are set up. You'll get a daily nudge at ${reminderTime}.`
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        alert('Test SMS sent! Check your phone.')
+      } else {
+        console.error('SMS error:', data)
+        alert(`Failed to send SMS: ${data.error || 'Unknown error'}. Make sure your phone number is correct.`)
+      }
+    } catch (error) {
+      console.error('SMS error:', error)
+      alert('Failed to send SMS. Please try again.')
     }
+
+    setSendingTest(false)
   }
 
   return (
@@ -120,14 +158,19 @@ export default function SettingsPage() {
               {/* Phone number */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-amber-900 mb-2">Phone Number</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (555) 123-4567"
-                  className="w-full px-4 py-3 border-2 border-amber-200 rounded-xl focus:border-amber-500 focus:outline-none"
-                />
-                <p className="text-xs text-amber-700/70 mt-1">Include country code (e.g., +1 for US)</p>
+                <div className="flex">
+                  <span className="inline-flex items-center px-4 py-3 border-2 border-r-0 border-amber-200 rounded-l-xl bg-amber-50 text-amber-700 font-medium">
+                    +1
+                  </span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    placeholder="(555) 123-4567"
+                    className="w-full px-4 py-3 border-2 border-amber-200 rounded-r-xl focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+                <p className="text-xs text-amber-700/70 mt-1">US numbers only for now</p>
               </div>
 
               {/* Reminder time */}
@@ -136,7 +179,7 @@ export default function SettingsPage() {
                 <select
                   value={reminderTime}
                   onChange={(e) => setReminderTime(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-amber-200 rounded-xl focus:border-amber-500 focus:outline-none"
+                  className="w-full px-4 py-3 border-2 border-amber-200 rounded-xl focus:border-amber-500 focus:outline-none bg-white"
                 >
                   <option value="07:00">7:00 AM</option>
                   <option value="08:00">8:00 AM</option>
@@ -153,9 +196,10 @@ export default function SettingsPage() {
               {/* Test button */}
               <button
                 onClick={sendTestSMS}
-                className="w-full bg-amber-100 text-amber-700 py-3 rounded-xl font-medium hover:bg-amber-200 transition mb-4"
+                disabled={sendingTest}
+                className="w-full bg-amber-100 text-amber-700 py-3 rounded-xl font-medium hover:bg-amber-200 transition mb-4 disabled:opacity-50"
               >
-                Send Test SMS
+                {sendingTest ? 'Sending...' : 'Send Test SMS'}
               </button>
             </>
           )}
