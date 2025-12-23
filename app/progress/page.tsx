@@ -7,148 +7,128 @@ import { supabase } from '../supabase'
 type Session = {
   id: string
   created_at: string
-  mission_title: string
   dog_response: string
-  owner_feeling: string
-  steps_completed: number
-  steps_total: number
-  outcome: string
-  notes: string
+  mission_title: string
 }
 
-type Dog = {
+type CuePractice = {
   id: string
-  name: string
   created_at: string
+  cues: { cue_id: string; cue_name: string; response: string }[]
 }
 
 export default function ProgressPage() {
-  const [dog, setDog] = useState<Dog | null>(null)
+  const [dogName, setDogName] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
+  const [cuePractices, setCuePractices] = useState<CuePractice[]>([])
   const [loading, setLoading] = useState(true)
-  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
-    fetchData()
+    loadData()
   }, [])
 
-  const fetchData = async () => {
+  const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       window.location.href = '/login'
       return
     }
 
-    const { data: dogData } = await supabase
+    const { data: dog } = await supabase
       .from('dogs')
-      .select('*')
+      .select('id, name')
       .eq('user_id', user.id)
       .limit(1)
       .single()
 
-    if (dogData) {
-      setDog(dogData)
+    if (dog) {
+      setDogName(dog.name)
 
-      const { data: sessionData } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('dog_id', dogData.id)
-        .order('created_at', { ascending: false })
+      const [sessionsRes, cuesRes] = await Promise.all([
+        supabase
+          .from('sessions')
+          .select('*')
+          .eq('dog_id', dog.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('cue_practices')
+          .select('*')
+          .eq('dog_id', dog.id)
+          .order('created_at', { ascending: false })
+      ])
 
-      if (sessionData) {
-        setSessions(sessionData)
-        calculateStreak(sessionData)
-      }
+      if (sessionsRes.data) setSessions(sessionsRes.data)
+      if (cuesRes.data) setCuePractices(cuesRes.data)
     }
+
     setLoading(false)
   }
 
-  const calculateStreak = (sessions: Session[]) => {
-    if (sessions.length === 0) {
-      setStreak(0)
-      return
-    }
+  // Combined activity for timeline
+  const getTimeline = () => {
+    const items: { type: 'session' | 'cue'; date: string; data: any }[] = []
+    
+    sessions.forEach(s => {
+      items.push({ type: 'session', date: s.created_at, data: s })
+    })
+    
+    cuePractices.forEach(c => {
+      items.push({ type: 'cue', date: c.created_at, data: c })
+    })
+    
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }
 
-    let currentStreak = 0
+  // Calculate stats
+  const totalSessions = sessions.length
+  const totalCuePractices = cuePractices.length
+  const totalActivities = totalSessions + totalCuePractices
+
+  const greatSessions = sessions.filter(s => s.dog_response === 'great').length
+  const okSessions = sessions.filter(s => s.dog_response === 'okay').length
+  const struggledSessions = sessions.filter(s => s.dog_response === 'struggled').length
+
+  const totalCuesTested = cuePractices.reduce((sum, cp) => sum + (cp.cues?.length || 0), 0)
+  const calmCues = cuePractices.reduce((sum, cp) => 
+    sum + (cp.cues?.filter(c => c.response === 'calm').length || 0), 0)
+  const anxiousCues = cuePractices.reduce((sum, cp) => 
+    sum + (cp.cues?.filter(c => c.response === 'anxious').length || 0), 0)
+
+  // Calculate streak (sessions only for now)
+  const calculateStreak = () => {
+    if (sessions.length === 0) return 0
+    
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-
+    
     const sessionDates = sessions.map(s => {
       const d = new Date(s.created_at)
       d.setHours(0, 0, 0, 0)
       return d.getTime()
     })
-
+    
     const uniqueDates = [...new Set(sessionDates)].sort((a, b) => b - a)
-
+    let streak = 0
+    
     for (let i = 0; i < uniqueDates.length; i++) {
-      const expectedDate = new Date(today)
-      expectedDate.setDate(expectedDate.getDate() - i)
-      expectedDate.setHours(0, 0, 0, 0)
-
-      if (uniqueDates[i] === expectedDate.getTime()) {
-        currentStreak++
-      } else if (i === 0 && uniqueDates[i] === expectedDate.getTime() - 86400000) {
-        // Allow for yesterday if no session today yet
-        currentStreak++
+      const expected = new Date(today)
+      expected.setDate(expected.getDate() - i)
+      expected.setHours(0, 0, 0, 0)
+      
+      if (uniqueDates[i] === expected.getTime()) {
+        streak++
+      } else if (i === 0 && uniqueDates[i] === expected.getTime() - 86400000) {
+        streak++
       } else {
         break
       }
     }
-
-    setStreak(currentStreak)
-  }
-
-  const getWeekNumber = (date: Date, startDate: Date) => {
-    const diff = date.getTime() - startDate.getTime()
-    return Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1
-  }
-
-  const getAnxietyScore = (sessions: Session[]) => {
-    if (sessions.length === 0) return null
-    const recentSessions = sessions.slice(0, 5)
-    const scores = recentSessions.map(s => {
-      if (s.dog_response === 'great') return 2
-      if (s.dog_response === 'okay') return 5
-      return 8
-    })
-    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-  }
-
-  const getProgressMessage = () => {
-    if (sessions.length === 0) return "Complete your first mission to start tracking progress!"
-    if (sessions.length < 5) return "Keep going! We need a few more sessions to show trends."
     
-    const recentScore = getAnxietyScore(sessions.slice(0, 5))
-    const olderScore = getAnxietyScore(sessions.slice(5, 10))
-    
-    if (!olderScore) return "Great start! Keep building consistency."
-    if (recentScore && recentScore < olderScore) return `${dog?.name} is improving! Anxiety score dropped from ${olderScore} to ${recentScore}.`
-    if (recentScore === olderScore) return "Holding steady. Consistency is key — keep it up!"
-    return "Some ups and downs are normal. Check the tips below."
+    return streak
   }
 
-  const getLast14Days = () => {
-    const days = []
-    for (let i = 13; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      date.setHours(0, 0, 0, 0)
-      
-      const daySession = sessions.find(s => {
-        const sessionDate = new Date(s.created_at)
-        sessionDate.setHours(0, 0, 0, 0)
-        return sessionDate.getTime() === date.getTime()
-      })
-
-      days.push({
-        date,
-        hasSession: !!daySession,
-        response: daySession?.dog_response || null
-      })
-    }
-    return days
-  }
+  const streak = calculateStreak()
+  const timeline = getTimeline()
 
   if (loading) {
     return (
@@ -158,12 +138,6 @@ export default function ProgressPage() {
     )
   }
 
-  const anxietyScore = getAnxietyScore(sessions)
-  const last14Days = getLast14Days()
-  const completionRate = sessions.length > 0
-    ? Math.round((sessions.filter(s => s.outcome === 'success').length / sessions.length) * 100)
-    : 0
-
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -171,103 +145,115 @@ export default function ProgressPage() {
           <Link href="/dashboard" className="text-amber-600 hover:underline">← Back to Dashboard</Link>
         </div>
 
-        <h1 className="text-3xl font-bold text-amber-950 mb-2">{dog?.name}'s Progress</h1>
-        <p className="text-amber-800/70 mb-8">{getProgressMessage()}</p>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-amber-950 mb-1">{dogName}'s Progress</h1>
+          <p className="text-amber-800/70">All your training in one place</p>
+        </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
+        {/* Stats Overview */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm text-center">
             <p className="text-3xl font-bold text-amber-600">{streak}</p>
-            <p className="text-sm text-amber-800/70">Day Streak 🔥</p>
+            <p className="text-xs text-amber-700/70">Day Streak 🔥</p>
           </div>
-          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
-            <p className="text-3xl font-bold text-amber-600">{sessions.length}</p>
-            <p className="text-sm text-amber-800/70">Sessions</p>
+          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm text-center">
+            <p className="text-3xl font-bold text-amber-950">{totalSessions}</p>
+            <p className="text-xs text-amber-700/70">Sessions</p>
           </div>
-          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
-            <p className="text-3xl font-bold text-amber-600">{anxietyScore || '—'}</p>
-            <p className="text-sm text-amber-800/70">Anxiety Score</p>
+          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm text-center">
+            <p className="text-3xl font-bold text-amber-950">{totalCuePractices}</p>
+            <p className="text-xs text-amber-700/70">Cue Practices</p>
           </div>
         </div>
 
-        {/* 14-Day Activity */}
-        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm mb-8">
-          <h2 className="font-bold text-amber-950 mb-4">Last 14 Days</h2>
-          <div className="flex gap-1 justify-between">
-            {last14Days.map((day, i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div
-                  className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs ${
-                    day.hasSession
-                      ? day.response === 'great'
-                        ? 'bg-green-500 text-white'
-                        : day.response === 'okay'
-                        ? 'bg-amber-400 text-white'
-                        : 'bg-red-400 text-white'
-                      : 'bg-gray-100 text-gray-400'
-                  }`}
-                >
-                  {day.hasSession ? (
-                    day.response === 'great' ? '★' : day.response === 'okay' ? '•' : '~'
-                  ) : ''}
-                </div>
-                <span className="text-xs text-amber-700/50 mt-1">
-                  {day.date.getDate()}
-                </span>
+        {/* Session Breakdown */}
+        {totalSessions > 0 && (
+          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm mb-4">
+            <h2 className="font-semibold text-amber-950 mb-3">Session Results</h2>
+            <div className="flex gap-2">
+              <div className="flex-1 bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{greatSessions}</p>
+                <p className="text-xs text-green-700">Great 🌟</p>
               </div>
-            ))}
+              <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-amber-600">{okSessions}</p>
+                <p className="text-xs text-amber-700">Okay 👍</p>
+              </div>
+              <div className="flex-1 bg-red-50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-red-600">{struggledSessions}</p>
+                <p className="text-xs text-red-700">Struggled 💪</p>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-center gap-6 mt-4 text-xs text-amber-700/70">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span> Great</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-amber-400 rounded"></span> Okay</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded"></span> Struggled</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-gray-100 rounded"></span> No session</span>
-          </div>
-        </div>
+        )}
 
-        {/* Why Setbacks Are Normal */}
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8">
-          <h2 className="font-bold text-blue-900 mb-3">💙 Why Setbacks Are Normal</h2>
-          <div className="space-y-3 text-blue-800 text-sm">
-            <p>
-              <strong>Dog anxiety isn't linear.</strong> Your dog might do great for 5 days, then have a rough day. This is completely normal and expected.
-            </p>
-            <p>
-              <strong>Common setback triggers:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1 ml-2">
-              <li>Changes in routine (guests, travel, new schedule)</li>
-              <li>Weather changes or loud noises</li>
-              <li>Your own stress (dogs pick up on it!)</li>
-              <li>Pushing too fast too soon</li>
-            </ul>
-            <p>
-              <strong>What to do:</strong> When setbacks happen, go back one step in difficulty. Rebuild confidence, then progress again. Two steps forward, one step back is still progress!
-            </p>
+        {/* Cue Progress */}
+        {totalCuesTested > 0 && (
+          <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm mb-6">
+            <h2 className="font-semibold text-amber-950 mb-3">Cue Desensitization</h2>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-amber-700">Calm responses</span>
+                  <span className="font-medium text-green-600">{calmCues} / {totalCuesTested}</span>
+                </div>
+                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-green-500 h-full rounded-full"
+                    style={{ width: `${totalCuesTested > 0 ? (calmCues / totalCuesTested) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            {anxiousCues > 0 && (
+              <p className="text-sm text-amber-700/70 mt-3">
+                {anxiousCues} cue{anxiousCues > 1 ? 's' : ''} still causing anxiety — keep practicing!
+              </p>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Session History */}
-        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm">
-          <h2 className="font-bold text-amber-950 mb-4">Recent Sessions</h2>
-          {sessions.length === 0 ? (
-            <p className="text-amber-700/70 text-center py-8">No sessions yet. Complete your first mission!</p>
+        {/* Activity Timeline */}
+        <div className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm">
+          <h2 className="font-semibold text-amber-950 mb-4">Recent Activity</h2>
+          
+          {timeline.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-amber-700/70 mb-4">No activity yet</p>
+              <Link 
+                href="/mission"
+                className="inline-block bg-amber-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-amber-700 transition"
+              >
+                Start First Session
+              </Link>
+            </div>
           ) : (
             <div className="space-y-3">
-              {sessions.slice(0, 10).map((session) => (
-                <div key={session.id} className="flex items-center gap-4 p-3 bg-amber-50 rounded-xl">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                    session.dog_response === 'great' ? 'bg-green-100' :
-                    session.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
+              {timeline.slice(0, 10).map((item, i) => (
+                <div key={i} className="flex items-start gap-3 pb-3 border-b border-amber-100 last:border-0">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    item.type === 'session' 
+                      ? item.data.dog_response === 'great' ? 'bg-green-100' 
+                        : item.data.dog_response === 'okay' ? 'bg-amber-100' 
+                        : 'bg-red-100'
+                      : 'bg-blue-100'
                   }`}>
-                    {session.dog_response === 'great' ? '🌟' :
-                     session.dog_response === 'okay' ? '😐' : '😰'}
+                    {item.type === 'session' ? '🎯' : '🚪'}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-amber-950 truncate">{session.mission_title || 'Training Session'}</p>
+                  <div className="flex-1">
+                    <p className="font-medium text-amber-950">
+                      {item.type === 'session' 
+                        ? item.data.mission_title || 'Training Session'
+                        : `Cue Practice (${item.data.cues?.length || 0} cues)`
+                      }
+                    </p>
                     <p className="text-sm text-amber-700/70">
-                      {new Date(session.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      {session.steps_total > 0 && ` • ${session.steps_completed}/${session.steps_total} steps`}
+                      {item.type === 'session' 
+                        ? `${item.data.dog_response === 'great' ? '🌟 Great' : item.data.dog_response === 'okay' ? '👍 Okay' : '💪 Struggled'}`
+                        : `${item.data.cues?.filter((c: any) => c.response === 'calm').length || 0} calm, ${item.data.cues?.filter((c: any) => c.response === 'anxious').length || 0} anxious`
+                      }
+                      {' • '}
+                      {new Date(item.date).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
@@ -276,13 +262,19 @@ export default function ProgressPage() {
           )}
         </div>
 
-        {/* CTA */}
-        <div className="mt-8 text-center">
+        {/* CTAs */}
+        <div className="grid grid-cols-2 gap-3 mt-6">
           <Link
             href="/mission"
-            className="inline-block bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 rounded-xl font-semibold transition-all hover:scale-105"
+            className="bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold text-center transition"
           >
-            Start Today's Mission →
+            New Session
+          </Link>
+          <Link
+            href="/departure-practice"
+            className="bg-amber-100 hover:bg-amber-200 text-amber-700 py-3 rounded-xl font-semibold text-center transition"
+          >
+            Practice Cues
           </Link>
         </div>
       </div>

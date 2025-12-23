@@ -317,30 +317,30 @@ export default function DashboardPage() {
         <div className="grid grid-cols-4 gap-3 mb-8">
           <Link
             href="/progress"
-            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
+            className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
-            <span className="text-2xl mb-2 block">📊</span>
+            <span className="text-xl mb-1 block">📊</span>
             <span className="text-amber-950 font-medium text-xs">Progress</span>
           </Link>
           <Link
-            href="/camera-setup"
-            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
-          >
-            <span className="text-2xl mb-2 block">📹</span>
-            <span className="text-amber-950 font-medium text-xs">Camera</span>
-          </Link>
-          <Link
             href="/videos"
-            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
+            className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
-            <span className="text-2xl mb-2 block">🎥</span>
+            <span className="text-xl mb-1 block">🎥</span>
             <span className="text-amber-950 font-medium text-xs">Videos</span>
           </Link>
           <Link
-            href="/settings"
-            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
+            href="/departure-practice"
+            className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
-            <span className="text-2xl mb-2 block">⚙️</span>
+            <span className="text-xl mb-1 block">🚪</span>
+            <span className="text-amber-950 font-medium text-xs">Cues</span>
+          </Link>
+          <Link
+            href="/settings"
+            className="bg-white rounded-xl p-3 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
+          >
+            <span className="text-xl mb-1 block">⚙️</span>
             <span className="text-amber-950 font-medium text-xs">Settings</span>
           </Link>
         </div>
