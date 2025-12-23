@@ -29,6 +29,7 @@ type Stats = {
   dailySignups: { date: string; count: number }[]
   dailySessions: { date: string; count: number }[]
   conversionFunnel: { step: string; count: number; rate: number }[]
+  feedback: { id: string; type: string; message: string; page: string; created_at: string }[]
 }
 
 export default function AdminPage() {
@@ -67,43 +68,36 @@ export default function AdminPage() {
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
     const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-    // Fetch all data
     const [
       { data: users },
       { data: dogs },
       { data: sessions },
+      { data: feedbackData },
     ] = await Promise.all([
       supabase.from('users').select('*'),
       supabase.from('dogs').select('*'),
       supabase.from('sessions').select('*'),
+      supabase.from('feedback').select('*').order('created_at', { ascending: false }),
     ])
 
-    // If no users table, use auth users via dogs
     const allDogs = dogs || []
     const allSessions = sessions || []
 
-    // Calculate signups (using dogs as proxy for active users)
     const signupsToday = allDogs.filter(d => new Date(d.created_at) >= today).length
     const signupsThisWeek = allDogs.filter(d => new Date(d.created_at) >= weekAgo).length
     const signupsThisMonth = allDogs.filter(d => new Date(d.created_at) >= monthAgo).length
 
-    // Sessions stats
     const sessionsToday = allSessions.filter(s => new Date(s.created_at) >= today).length
     const sessionsThisWeek = allSessions.filter(s => new Date(s.created_at) >= weekAgo).length
 
-    // Active users (dogs with sessions this week)
     const activeDogsThisWeek = new Set(
-      allSessions
-        .filter(s => new Date(s.created_at) >= weekAgo)
-        .map(s => s.dog_id)
+      allSessions.filter(s => new Date(s.created_at) >= weekAgo).map(s => s.dog_id)
     ).size
 
-    // Response breakdown
     const greatResponses = allSessions.filter(s => s.dog_response === 'great').length
     const okayResponses = allSessions.filter(s => s.dog_response === 'okay').length
     const struggledResponses = allSessions.filter(s => s.dog_response === 'struggled').length
 
-    // Dogs by status
     const dogStats = allDogs.map(dog => {
       const dogSessions = allSessions
         .filter(s => s.dog_id === dog.id)
@@ -134,13 +128,7 @@ export default function AdminPage() {
         ? Math.floor((now.getTime() - new Date(lastSession.created_at).getTime()) / (24 * 60 * 60 * 1000))
         : 999
 
-      return {
-        ...dog,
-        sessionCount: dogSessions.length,
-        trend,
-        daysSinceLastSession,
-        recentScore
-      }
+      return { ...dog, sessionCount: dogSessions.length, trend, daysSinceLastSession, recentScore }
     })
 
     const dogsImproving = dogStats.filter(d => d.trend === 'improving').length
@@ -148,13 +136,11 @@ export default function AdminPage() {
     const dogsNew = dogStats.filter(d => d.trend === 'new').length
     const churnRisk = dogStats.filter(d => d.daysSinceLastSession >= 7 && d.sessionCount > 0).length
 
-    // Top dogs by sessions
     const topDogs = dogStats
       .sort((a, b) => b.sessionCount - a.sessionCount)
       .slice(0, 5)
       .map(d => ({ name: d.name, sessions: d.sessionCount, trend: d.trend }))
 
-    // Recent signups with activity
     const recentSignups = allDogs
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10)
@@ -165,7 +151,6 @@ export default function AdminPage() {
         sessions: allSessions.filter(s => s.dog_id === d.id).length
       }))
 
-    // Recent sessions
     const recentSessions = allSessions
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10)
@@ -179,7 +164,6 @@ export default function AdminPage() {
         }
       })
 
-    // Daily signups (last 14 days)
     const dailySignups: { date: string; count: number }[] = []
     for (let i = 13; i >= 0; i--) {
       const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
@@ -188,7 +172,6 @@ export default function AdminPage() {
       dailySignups.push({ date: dateStr, count })
     }
 
-    // Daily sessions (last 14 days)
     const dailySessions: { date: string; count: number }[] = []
     for (let i = 13; i >= 0; i--) {
       const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
@@ -197,8 +180,7 @@ export default function AdminPage() {
       dailySessions.push({ date: dateStr, count })
     }
 
-    // Conversion funnel
-    const totalVisitors = allDogs.length * 10 // Rough estimate
+    const totalVisitors = allDogs.length * 10
     const conversionFunnel = [
       { step: 'Visited Site', count: totalVisitors, rate: 100 },
       { step: 'Started Signup', count: Math.round(totalVisitors * 0.3), rate: 30 },
@@ -208,25 +190,12 @@ export default function AdminPage() {
       { step: 'Returned (2+ sessions)', count: dogStats.filter(d => d.sessionCount >= 2).length, rate: 0 },
     ]
     conversionFunnel.forEach((step, i) => {
-      if (i > 0) {
-        step.rate = conversionFunnel[0].count > 0 ? Math.round((step.count / conversionFunnel[0].count) * 100) : 0
-      }
+      if (i > 0) step.rate = conversionFunnel[0].count > 0 ? Math.round((step.count / conversionFunnel[0].count) * 100) : 0
     })
 
-    // Avg sessions per dog
-    const avgSessionsPerDog = allDogs.length > 0
-      ? Math.round((allSessions.length / allDogs.length) * 10) / 10
-      : 0
-
-    // Completion rate (sessions with 'great' or 'okay')
-    const completionRate = allSessions.length > 0
-      ? Math.round(((greatResponses + okayResponses) / allSessions.length) * 100)
-      : 0
-
-    // Avg streak (rough calculation)
-    const avgStreak = dogStats.length > 0
-      ? Math.round(dogStats.reduce((sum, d) => sum + Math.min(d.sessionCount, 7), 0) / dogStats.length * 10) / 10
-      : 0
+    const avgSessionsPerDog = allDogs.length > 0 ? Math.round((allSessions.length / allDogs.length) * 10) / 10 : 0
+    const completionRate = allSessions.length > 0 ? Math.round(((greatResponses + okayResponses) / allSessions.length) * 100) : 0
+    const avgStreak = dogStats.length > 0 ? Math.round(dogStats.reduce((sum, d) => sum + Math.min(d.sessionCount, 7), 0) / dogStats.length * 10) / 10 : 0
 
     setStats({
       totalUsers: allDogs.length,
@@ -254,6 +223,7 @@ export default function AdminPage() {
       dailySignups,
       dailySessions,
       conversionFunnel,
+      feedback: feedbackData || [],
     })
 
     setLoading(false)
@@ -264,16 +234,8 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
         <form onSubmit={authenticate} className="bg-gray-800 p-8 rounded-xl max-w-sm w-full">
           <h1 className="text-xl font-bold text-white mb-4">Admin Access</h1>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 mb-4"
-          />
-          <button type="submit" className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold">
-            Enter
-          </button>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 mb-4" />
+          <button type="submit" className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold">Enter</button>
         </form>
       </div>
     )
@@ -292,12 +254,7 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-white">📊 PawCalm Admin</h1>
-          <button
-            onClick={() => { sessionStorage.removeItem('adminAuth'); setAuthenticated(false) }}
-            className="text-gray-400 hover:text-white text-sm"
-          >
-            Logout
-          </button>
+          <button onClick={() => { sessionStorage.removeItem('adminAuth'); setAuthenticated(false) }} className="text-gray-400 hover:text-white text-sm">Logout</button>
         </div>
 
         {/* Key Metrics */}
@@ -320,32 +277,23 @@ export default function AdminPage() {
 
         {/* Charts Row */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Signups Chart */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Signups (14 days)</h2>
             <div className="flex items-end gap-1 h-32">
               {stats.dailySignups.map((day, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center">
-                  <div
-                    className="w-full bg-amber-600 rounded-t"
-                    style={{ height: `${Math.max(day.count * 20, 4)}px` }}
-                  />
+                  <div className="w-full bg-amber-600 rounded-t" style={{ height: `${Math.max(day.count * 20, 4)}px` }} />
                   <span className="text-xs text-gray-500 mt-1">{day.date.slice(-2)}</span>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Sessions Chart */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Sessions (14 days)</h2>
             <div className="flex items-end gap-1 h-32">
               {stats.dailySessions.map((day, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center">
-                  <div
-                    className="w-full bg-green-600 rounded-t"
-                    style={{ height: `${Math.max(day.count * 15, 4)}px` }}
-                  />
+                  <div className="w-full bg-green-600 rounded-t" style={{ height: `${Math.max(day.count * 15, 4)}px` }} />
                   <span className="text-xs text-gray-500 mt-1">{day.date.slice(-2)}</span>
                 </div>
               ))}
@@ -355,7 +303,6 @@ export default function AdminPage() {
 
         {/* Dog Outcomes & Response Breakdown */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Dog Outcomes */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Dog Outcomes</h2>
             <div className="space-y-3">
@@ -364,8 +311,6 @@ export default function AdminPage() {
               <OutcomeBar label="New (< 5 sessions)" count={stats.dogsNew} total={stats.totalDogs} color="bg-blue-500" />
             </div>
           </div>
-
-          {/* Response Breakdown */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Session Responses</h2>
             <div className="space-y-3">
@@ -373,9 +318,7 @@ export default function AdminPage() {
               <OutcomeBar label="Okay 😐" count={stats.okayResponses} total={stats.totalSessions} color="bg-amber-500" />
               <OutcomeBar label="Struggled 😰" count={stats.struggledResponses} total={stats.totalSessions} color="bg-red-500" />
             </div>
-            <p className="text-gray-400 text-sm mt-4">
-              Success Rate: <span className="text-white font-semibold">{stats.completionRate}%</span>
-            </p>
+            <p className="text-gray-400 text-sm mt-4">Success Rate: <span className="text-white font-semibold">{stats.completionRate}%</span></p>
           </div>
         </div>
 
@@ -387,10 +330,7 @@ export default function AdminPage() {
               <div key={i} className="flex items-center gap-4">
                 <div className="w-40 text-gray-400 text-sm">{step.step}</div>
                 <div className="flex-1 bg-gray-700 rounded-full h-6 overflow-hidden">
-                  <div
-                    className="bg-amber-600 h-full rounded-full"
-                    style={{ width: `${step.rate}%` }}
-                  />
+                  <div className="bg-amber-600 h-full rounded-full" style={{ width: `${step.rate}%` }} />
                 </div>
                 <div className="w-20 text-right text-white text-sm">{step.count} ({step.rate}%)</div>
               </div>
@@ -400,7 +340,6 @@ export default function AdminPage() {
 
         {/* Tables Row */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Top Dogs */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">🏆 Top Dogs</h2>
             <div className="space-y-2">
@@ -409,21 +348,13 @@ export default function AdminPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-gray-400">#{i + 1}</span>
                     <span className="text-white">{dog.name}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      dog.trend === 'improving' ? 'bg-green-500/20 text-green-400' :
-                      dog.trend === 'declining' ? 'bg-red-500/20 text-red-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {dog.trend}
-                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${dog.trend === 'improving' ? 'bg-green-500/20 text-green-400' : dog.trend === 'declining' ? 'bg-red-500/20 text-red-400' : 'bg-gray-500/20 text-gray-400'}`}>{dog.trend}</span>
                   </div>
                   <span className="text-amber-500 font-semibold">{dog.sessions} sessions</span>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Recent Sessions */}
           <div className="bg-gray-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Recent Sessions</h2>
             <div className="space-y-2">
@@ -435,9 +366,7 @@ export default function AdminPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span>{session.dog_response === 'great' ? '🌟' : session.dog_response === 'okay' ? '😐' : '😰'}</span>
-                    <span className="text-gray-500 text-xs">
-                      {new Date(session.created_at).toLocaleDateString()}
-                    </span>
+                    <span className="text-gray-500 text-xs">{new Date(session.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
               ))}
@@ -446,7 +375,7 @@ export default function AdminPage() {
         </div>
 
         {/* Recent Signups */}
-        <div className="bg-gray-800 rounded-xl p-6">
+        <div className="bg-gray-800 rounded-xl p-6 mb-8">
           <h2 className="text-lg font-semibold text-white mb-4">Recent Signups</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -465,11 +394,7 @@ export default function AdminPage() {
                     <td className="py-3 text-gray-400">{new Date(signup.created_at).toLocaleDateString()}</td>
                     <td className="py-3">{signup.sessions}</td>
                     <td className="py-3">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        signup.sessions === 0 ? 'bg-red-500/20 text-red-400' :
-                        signup.sessions < 3 ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-green-500/20 text-green-400'
-                      }`}>
+                      <span className={`text-xs px-2 py-1 rounded ${signup.sessions === 0 ? 'bg-red-500/20 text-red-400' : signup.sessions < 3 ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
                         {signup.sessions === 0 ? 'No activity' : signup.sessions < 3 ? 'Getting started' : 'Active'}
                       </span>
                     </td>
@@ -478,6 +403,28 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Feedback */}
+        <div className="bg-gray-800 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">💬 User Feedback ({stats.feedback.length})</h2>
+          {stats.feedback.length === 0 ? (
+            <p className="text-gray-400">No feedback yet</p>
+          ) : (
+            <div className="space-y-3">
+              {stats.feedback.map((item) => (
+                <div key={item.id} className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-xs px-2 py-1 rounded ${item.type === 'love' ? 'bg-green-500/20 text-green-400' : item.type === 'issue' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                      {item.type === 'love' ? '💚 Love' : item.type === 'issue' ? '🐛 Issue' : '💡 Idea'}
+                    </span>
+                    <span className="text-gray-500 text-xs">{new Date(item.created_at).toLocaleDateString()} • {item.page}</span>
+                  </div>
+                  <p className="text-white">{item.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -488,13 +435,7 @@ function MetricCard({ label, value, color, small }: { label: string; value: numb
   return (
     <div className={`bg-gray-800 rounded-xl ${small ? 'p-4' : 'p-6'}`}>
       <p className={`text-gray-400 ${small ? 'text-xs' : 'text-sm'}`}>{label}</p>
-      <p className={`font-bold ${small ? 'text-xl' : 'text-3xl'} ${
-        color === 'green' ? 'text-green-500' :
-        color === 'red' ? 'text-red-500' :
-        'text-white'
-      }`}>
-        {value}
-      </p>
+      <p className={`font-bold ${small ? 'text-xl' : 'text-3xl'} ${color === 'green' ? 'text-green-500' : color === 'red' ? 'text-red-500' : 'text-white'}`}>{value}</p>
     </div>
   )
 }
