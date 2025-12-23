@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from './supabase';
+import ExitIntent from './components/ExitIntent';
 
 export default function LandingPage() {
   const [email, setEmail] = useState('');
@@ -60,7 +61,6 @@ export default function LandingPage() {
 
       <main className="flex-1 px-4 py-8 lg:py-12">
         <div className="max-w-6xl mx-auto">
-          {/* Mobile: Stack, Desktop: Side by side */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8 lg:gap-12">
             
             {/* Left: Hero */}
@@ -196,6 +196,9 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Exit Intent Popup */}
+      <ExitIntent />
     </div>
   );
 }
