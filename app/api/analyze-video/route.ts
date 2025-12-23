@@ -25,18 +25,15 @@ async function downloadVideo(url: string, filepath: string): Promise<void> {
 }
 
 async function extractFrames(videoPath: string, outputDir: string, numFrames: number = 5): Promise<string[]> {
-  // Create output directory
   if (!existsSync(outputDir)) {
     await mkdir(outputDir, { recursive: true })
   }
 
-  // Get video duration
   const { stdout: durationOutput } = await execAsync(
     `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`
   )
   const duration = parseFloat(durationOutput.trim())
   
-  // Calculate intervals
   const interval = duration / (numFrames + 1)
   const frames: string[] = []
 
@@ -55,7 +52,6 @@ async function extractFrames(videoPath: string, outputDir: string, numFrames: nu
 }
 
 async function analyzeFrames(frames: string[], dogName: string): Promise<{ isDog: boolean; analysis: string; triggers: string[] }> {
-  // Read frames and convert to base64
   const frameImages = await Promise.all(
     frames.map(async (framePath) => {
       const buffer = await readFile(framePath)
@@ -90,7 +86,6 @@ If you see a dog, isDog is true. If you see no dog, or only humans/other animals
   let verificationResult
   try {
     const content = verificationResponse.choices[0]?.message?.content || '{}'
-    // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     verificationResult = JSON.parse(jsonMatch ? jsonMatch[0] : '{}')
   } catch {
@@ -100,68 +95,92 @@ If you see a dog, isDog is true. If you see no dog, or only humans/other animals
   if (!verificationResult.isDog) {
     return {
       isDog: false,
-      analysis: `## Unable to Analyze Video
+      analysis: `## Hmm, Where's the Pup? 🔍
 
-We couldn't detect a dog in this video. Please upload a video that clearly shows ${dogName || 'your dog'} during a separation period.
+We couldn't spot a dog in this video! To get the best analysis for ${dogName || 'your dog'}, we need to clearly see them in the frame.
 
-**Tips for a good video:**
-- Make sure ${dogName || 'your dog'} is visible in the frame
-- Record from an angle that captures their full body
-- Ensure adequate lighting
+**Quick tips for your next video:**
+- Make sure ${dogName || 'your dog'} is visible throughout
+- Try a wider angle that captures their favorite spots
+- Check that lighting is good enough to see clearly
 
-Reason: ${verificationResult.reason || 'No dog detected in video frames'}`,
+*${verificationResult.reason || 'No dog detected in video frames'}*`,
       triggers: []
     }
   }
 
-  // Now analyze the dog's behavior
+  // Behavior analysis with fun personality
   const analysisResponse = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `You are an expert dog behaviorist specializing in separation anxiety. You're analyzing video frames of a dog named ${dogName || 'a dog'} who was left alone.
+        content: `You are an expert dog behaviorist with a warm, encouraging personality. You're analyzing video frames of ${dogName || 'a dog'} during a separation period.
 
-Analyze the frames carefully for:
+IMPORTANT: Be accurate and don't over-diagnose. Many normal dog behaviors are NOT signs of anxiety:
 
-1. **Body Language Signs:**
-   - Pacing or restlessness
-   - Panting (when not hot)
-   - Drooling
-   - Trembling or shaking
-   - Lip licking or yawning (stress signals)
-   - Whale eye (showing whites of eyes)
-   - Ears pinned back
-   - Tail tucked or stiff
-   - Lowered body posture
+**NORMAL behaviors (NOT anxiety):**
+- Calmly walking around exploring
+- Sniffing the environment
+- Lying down relaxed (soft body, normal breathing)
+- Looking out windows casually
+- Tail wagging with relaxed body
+- Sitting or standing calmly
+- Playing with toys
+- Eating or drinking normally
+- Stretching or yawning once (not repeatedly)
 
-2. **Position & Movement:**
-   - Staying near door/exit
-   - Pacing patterns
-   - Hiding behavior
-   - Destructive positioning (near doors, furniture)
-   - Settled vs. unsettled
+**ACTUAL anxiety signs (only flag if clearly present):**
+- Pacing in repetitive patterns (same path over and over)
+- Excessive panting when not hot or after exercise
+- Drooling excessively
+- Trembling or shaking visibly
+- Whale eye (whites of eyes showing with tense face)
+- Ears pinned flat back against head
+- Tail tucked tightly between legs
+- Lowered, cowering body posture
+- Lip licking repeatedly (not after eating)
+- Yawning repeatedly (stress signal)
+- Scratching at doors/windows frantically
+- Destructive behavior
+- Frozen/statue-like stillness with tense body
+- Attempting to escape
 
-3. **Overall Assessment:**
-   - Anxiety level: None / Mild / Moderate / Severe
-   - Key concerns observed
-   - Positive signs (if any)
+**Your response style:**
+- Be warm, friendly, and encouraging
+- Use ${dogName}'s name throughout
+- Add fun observations about their personality
+- Use emojis sparingly but effectively
+- Celebrate calm behavior enthusiastically
+- If there IS anxiety, be compassionate and hopeful
 
-4. **Specific Recommendations:**
-   - Based on what you observe, provide 2-3 specific training recommendations
+Format your response like this:
 
-Be specific about what you actually see in the frames. If the dog appears calm, say so. Don't invent problems that aren't visible.
+## ${dogName}'s Vibe Check 🐕
+(A fun, 1-2 sentence summary of their overall mood - be creative and specific to what you see!)
 
-Format your response with clear headers and bullet points.`
+## What I Spotted
+(Frame-by-frame observations, written in an engaging way. Note specific behaviors you actually see.)
+
+## The Verdict
+**Anxiety Level: [None 😎 / Mild 😊 / Moderate 😟 / Severe 😰]**
+(Brief explanation of why you chose this level based on what you observed)
+
+## The Good Stuff ✨
+(Positive behaviors - celebrate these! Be specific about what ${dogName} is doing well.)
+
+## Tips for ${dogName}
+(If anxiety detected: compassionate, specific recommendations)
+(If calm: encouragement and maybe fun enrichment ideas to keep them happy)`
       },
       {
         role: 'user',
         content: [
           { 
             type: 'text', 
-            text: `Please analyze these ${frames.length} frames from a video of ${dogName || 'a dog'} during a separation period. What behaviors and body language do you observe? Provide specific, actionable insights.` 
+            text: `Analyze these ${frames.length} frames of ${dogName}. Be accurate - don't assume anxiety if the dog looks calm. Make it fun and personalized to what you actually observe!` 
           },
-          ...frameImages.map((base64, i) => ({
+          ...frameImages.map((base64) => ({
             type: 'image_url' as const,
             image_url: { url: `data:image/jpeg;base64,${base64}` }
           }))
@@ -173,17 +192,25 @@ Format your response with clear headers and bullet points.`
 
   const analysis = analysisResponse.choices[0]?.message?.content || 'Analysis could not be completed.'
 
-  // Extract triggers from the analysis
-  const triggerKeywords = [
-    'pacing', 'panting', 'drooling', 'trembling', 'shaking',
-    'whining', 'barking', 'howling', 'scratching', 'destruction',
-    'door', 'exit', 'anxious', 'stressed', 'restless', 'unsettled'
-  ]
-  
+  // Only extract triggers if there's actual anxiety detected
   const analysisLower = analysis.toLowerCase()
-  const triggers = triggerKeywords.filter(keyword => 
-    analysisLower.includes(keyword)
-  )
+  const hasAnxiety = analysisLower.includes('mild 😊') || 
+                     analysisLower.includes('moderate 😟') || 
+                     analysisLower.includes('severe 😰')
+
+  let triggers: string[] = []
+  
+  if (hasAnxiety) {
+    const triggerKeywords = [
+      'pacing', 'panting', 'drooling', 'trembling', 'shaking',
+      'whining', 'barking', 'howling', 'scratching', 'destruction',
+      'whale eye', 'tucked tail', 'cowering', 'escape'
+    ]
+    
+    triggers = triggerKeywords.filter(keyword => 
+      analysisLower.includes(keyword)
+    )
+  }
 
   return { isDog: true, analysis, triggers }
 }
@@ -222,7 +249,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing videoId or videoUrl' }, { status: 400 })
     }
 
-    // Create temp directory for this analysis
     const tempDir = path.join('/tmp', `video-analysis-${videoId}`)
     const videoPath = path.join(tempDir, 'video.mp4')
     const framesDir = path.join(tempDir, 'frames')
@@ -230,22 +256,18 @@ export async function POST(request: Request) {
     tempDirs.push(tempDir)
     tempFiles.push(videoPath)
 
-    // Download video
     console.log('Downloading video...')
     await mkdir(tempDir, { recursive: true })
     await downloadVideo(videoUrl, videoPath)
 
-    // Extract frames
     console.log('Extracting frames...')
     const frames = await extractFrames(videoPath, framesDir, 5)
     tempFiles.push(...frames)
     tempDirs.push(framesDir)
 
-    // Analyze frames
     console.log('Analyzing frames with AI...')
     const { isDog, analysis, triggers } = await analyzeFrames(frames, dogName)
 
-    // Update database
     const { error } = await supabase
       .from('video_analyses')
       .update({
@@ -260,7 +282,6 @@ export async function POST(request: Request) {
       throw error
     }
 
-    // Cleanup temp files
     await cleanup(tempFiles, tempDirs)
 
     console.log('Analysis complete:', isDog ? 'Dog detected' : 'No dog detected')
@@ -269,16 +290,23 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Video analysis error:', error)
 
-    // Cleanup on error
     await cleanup(tempFiles, tempDirs)
 
-    // Update status to failed
     if (videoId) {
       await supabase
         .from('video_analyses')
         .update({ 
           status: 'failed',
-          analysis: 'Analysis failed. Please try uploading again. Make sure the video is a valid format (MP4, MOV, WebM) and under 100MB.'
+          analysis: `## Oops! Something Went Wrong 😅
+
+We had trouble analyzing this video. No worries though - this happens sometimes!
+
+**Let's try again:**
+- Make sure your video is MP4, MOV, or WebM format
+- Keep it under 100MB
+- Check that the video plays correctly on your device
+
+Upload another video and we'll give it another shot! 🐕`
         })
         .eq('id', videoId)
     }
