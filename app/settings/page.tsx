@@ -5,14 +5,7 @@ import Link from 'next/link'
 import { supabase } from '../supabase'
 
 export default function SettingsPage() {
-  const [phone, setPhone] = useState('')
-  const [reminderTime, setReminderTime] = useState('09:00')
-  const [smsEnabled, setSmsEnabled] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [dogId, setDogId] = useState<string | null>(null)
   const [dogName, setDogName] = useState('')
-  const [sendingTest, setSendingTest] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -27,95 +20,14 @@ export default function SettingsPage() {
 
     const { data: dog } = await supabase
       .from('dogs')
-      .select('*')
+      .select('name')
       .eq('user_id', user.id)
       .limit(1)
       .single()
 
     if (dog) {
-      setDogId(dog.id)
       setDogName(dog.name)
-      setPhone(dog.owner_phone || '')
-      setReminderTime(dog.reminder_time || '09:00')
-      setSmsEnabled(dog.sms_enabled || false)
     }
-  }
-
-  // Format phone for display (123) 456-7890
-  const formatPhoneDisplay = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length <= 3) return numbers
-    if (numbers.length <= 6) return `(${numbers.slice(0, 3)}) ${numbers.slice(3)}`
-    return `(${numbers.slice(0, 3)}) ${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`
-  }
-
-  // Format phone for Twilio +15551234567
-  const formatPhoneForTwilio = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length === 10) return `+1${numbers}`
-    if (numbers.length === 11 && numbers.startsWith('1')) return `+${numbers}`
-    return `+${numbers}`
-  }
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target.value
-    const numbers = input.replace(/\D/g, '').slice(0, 10)
-    setPhone(formatPhoneDisplay(numbers))
-  }
-
-  const saveSettings = async () => {
-    if (!dogId) return
-    setSaving(true)
-
-    const formattedPhone = formatPhoneForTwilio(phone)
-
-    await supabase
-      .from('dogs')
-      .update({
-        owner_phone: formattedPhone,
-        reminder_time: reminderTime,
-        sms_enabled: smsEnabled
-      })
-      .eq('id', dogId)
-
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
-
-  const sendTestSMS = async () => {
-    if (!phone || phone.replace(/\D/g, '').length < 10) {
-      alert('Please enter a valid 10-digit phone number')
-      return
-    }
-
-    setSendingTest(true)
-    const formattedPhone = formatPhoneForTwilio(phone)
-
-    try {
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: formattedPhone,
-          message: `🐕 Test from PawCalm! Your reminders for ${dogName} are set up. You'll get a daily nudge at ${reminderTime}.`
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        alert('Test SMS sent! Check your phone.')
-      } else {
-        console.error('SMS error:', data)
-        alert(`Failed to send SMS: ${data.error || 'Unknown error'}. Make sure your phone number is correct.`)
-      }
-    } catch (error) {
-      console.error('SMS error:', error)
-      alert('Failed to send SMS. Please try again.')
-    }
-
-    setSendingTest(false)
   }
 
   return (
@@ -128,104 +40,47 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold text-amber-950 mb-2">Settings</h1>
         <p className="text-amber-800/70 mb-8">Manage your notifications and preferences.</p>
 
-        {/* SMS Reminders */}
-        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-2xl">📱</span>
-            <h2 className="text-xl font-bold text-amber-950">Daily SMS Reminders</h2>
+        {/* SMS Reminders - Coming Soon */}
+        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm mb-6 opacity-75">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📱</span>
+              <h2 className="text-xl font-bold text-amber-950">Daily SMS Reminders</h2>
+            </div>
+            <span className="bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">Coming Soon</span>
           </div>
           
-          <p className="text-amber-800/70 text-sm mb-6">
-            Get a personalized text reminder to train with {dogName || 'your dog'} every day.
+          <p className="text-amber-800/70 text-sm mb-4">
+            Get a personalized text reminder to train with {dogName || 'your dog'} every day. Stay consistent and never miss a session.
           </p>
 
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between mb-6 p-4 bg-amber-50 rounded-xl">
-            <div>
-              <p className="font-medium text-amber-950">Enable SMS Reminders</p>
-              <p className="text-sm text-amber-700/70">We'll text you daily</p>
-            </div>
-            <button
-              onClick={() => setSmsEnabled(!smsEnabled)}
-              className={`w-14 h-8 rounded-full transition-colors ${smsEnabled ? 'bg-amber-600' : 'bg-gray-300'}`}
-            >
-              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${smsEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
-            </button>
-          </div>
-
-          {smsEnabled && (
-            <>
-              {/* Phone number */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-amber-900 mb-2">Phone Number</label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-4 py-3 border-2 border-r-0 border-amber-200 rounded-l-xl bg-amber-50 text-amber-700 font-medium">
-                    +1
-                  </span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    placeholder="(555) 123-4567"
-                    className="w-full px-4 py-3 border-2 border-amber-200 rounded-r-xl focus:border-amber-500 focus:outline-none"
-                  />
-                </div>
-                <p className="text-xs text-amber-700/70 mt-1">US numbers only for now</p>
-              </div>
-
-              {/* Reminder time */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-amber-900 mb-2">Reminder Time</label>
-                <select
-                  value={reminderTime}
-                  onChange={(e) => setReminderTime(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-amber-200 rounded-xl focus:border-amber-500 focus:outline-none bg-white"
-                >
-                  <option value="07:00">7:00 AM</option>
-                  <option value="08:00">8:00 AM</option>
-                  <option value="09:00">9:00 AM</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="12:00">12:00 PM</option>
-                  <option value="17:00">5:00 PM</option>
-                  <option value="18:00">6:00 PM</option>
-                  <option value="19:00">7:00 PM</option>
-                  <option value="20:00">8:00 PM</option>
-                </select>
-              </div>
-
-              {/* Test button */}
-              <button
-                onClick={sendTestSMS}
-                disabled={sendingTest}
-                className="w-full bg-amber-100 text-amber-700 py-3 rounded-xl font-medium hover:bg-amber-200 transition mb-4 disabled:opacity-50"
-              >
-                {sendingTest ? 'Sending...' : 'Send Test SMS'}
-              </button>
-            </>
-          )}
-
-          {/* Save button */}
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold transition disabled:bg-amber-400"
-          >
-            {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save Settings'}
-          </button>
-        </div>
-
-        {/* What you'll receive */}
-        {smsEnabled && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">What you'll receive:</h3>
-            <ul className="text-blue-800 text-sm space-y-1">
+          <div className="bg-amber-50 rounded-xl p-4">
+            <p className="text-amber-800 text-sm">
+              <strong>What you'll get:</strong>
+            </p>
+            <ul className="text-amber-700 text-sm mt-2 space-y-1">
               <li>• Daily reminder at your chosen time</li>
               <li>• Streak alerts to keep you motivated</li>
               <li>• Encouragement after tough sessions</li>
               <li>• Celebration texts for milestones</li>
             </ul>
           </div>
-        )}
+        </div>
+
+        {/* Email Notifications - Coming Soon */}
+        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm opacity-75">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📧</span>
+              <h2 className="text-xl font-bold text-amber-950">Weekly Progress Email</h2>
+            </div>
+            <span className="bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">Coming Soon</span>
+          </div>
+          
+          <p className="text-amber-800/70 text-sm">
+            Receive a weekly summary of {dogName || 'your dog'}'s progress, tips for the week ahead, and personalized insights.
+          </p>
+        </div>
       </div>
     </div>
   )
