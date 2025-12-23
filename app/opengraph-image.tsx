@@ -8,20 +8,12 @@ export const metadata: Metadata = {
   title: "PawCalm - AI Dog Separation Anxiety Training",
   description: "Calm your anxious dog in 5 minutes a day. AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
   keywords: ["dog anxiety", "separation anxiety", "dog training", "pet behavior", "dog calm"],
-  authors: [{ name: "PawCalm" }],
+  metadataBase: new URL("https://pawcalm.ai"),
   openGraph: {
     title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
     description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
     url: "https://pawcalm.ai",
     siteName: "PawCalm",
-    images: [
-      {
-        url: "https://pawcalm.ai/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "PawCalm - AI Dog Separation Anxiety Training",
-      },
-    ],
     locale: "en_US",
     type: "website",
   },
@@ -29,11 +21,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
     description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-    images: ["https://pawcalm.ai/og-image.png"],
-  },
-  robots: {
-    index: true,
-    follow: true,
   },
 };
 
@@ -49,7 +36,6 @@ export default function RootLayout({
           src="https://cdn.jsdelivr.net/npm/@mux/mux-player@2"
           strategy="beforeInteractive"
         />
-        <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="flex flex-col min-h-screen">
         <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">

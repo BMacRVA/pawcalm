@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../supabase'
 
 type Dog = {
@@ -13,15 +14,24 @@ type Dog = {
   created_at: string
 }
 
+type Session = {
+  id: string
+  created_at: string
+  dog_response: string
+}
+
 export default function DashboardPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
+  const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
+  const [streak, setStreak] = useState(0)
+  const [todayComplete, setTodayComplete] = useState(false)
 
   useEffect(() => {
-    fetchDogs()
+    fetchData()
   }, [])
 
-  const fetchDogs = async () => {
+  const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -29,106 +39,265 @@ export default function DashboardPage() {
       return
     }
 
-    const { data, error } = await supabase
+    const { data: dogData } = await supabase
       .from('dogs')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error fetching dogs:', error)
+    if (dogData && dogData.length > 0) {
+      setDogs(dogData)
+
+      const { data: sessionData } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('dog_id', dogData[0].id)
+        .order('created_at', { ascending: false })
+
+      if (sessionData) {
+        setSessions(sessionData)
+        calculateStreak(sessionData)
+      }
     } else {
-      setDogs(data || [])
+      setDogs([])
     }
     setLoading(false)
   }
 
+  const calculateStreak = (sessions: Session[]) => {
+    if (sessions.length === 0) {
+      setStreak(0)
+      return
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Check if there's a session today
+    const todaySession = sessions.find(s => {
+      const sessionDate = new Date(s.created_at)
+      sessionDate.setHours(0, 0, 0, 0)
+      return sessionDate.getTime() === today.getTime()
+    })
+    setTodayComplete(!!todaySession)
+
+    // Calculate streak
+    let currentStreak = 0
+    const sessionDates = sessions.map(s => {
+      const d = new Date(s.created_at)
+      d.setHours(0, 0, 0, 0)
+      return d.getTime()
+    })
+
+    const uniqueDates = [...new Set(sessionDates)].sort((a, b) => b - a)
+
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const expectedDate = new Date(today)
+      expectedDate.setDate(expectedDate.getDate() - i)
+      expectedDate.setHours(0, 0, 0, 0)
+
+      if (uniqueDates[i] === expectedDate.getTime()) {
+        currentStreak++
+      } else if (i === 0) {
+        // Check if yesterday counts (no session today yet)
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        if (uniqueDates[i] === yesterday.getTime()) {
+          currentStreak++
+        } else {
+          break
+        }
+      } else {
+        break
+      }
+    }
+
+    setStreak(currentStreak)
+  }
+
+  const getWeekProgress = () => {
+    const days = []
+    const today = new Date()
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      date.setHours(0, 0, 0, 0)
+      
+      const daySession = sessions.find(s => {
+        const sessionDate = new Date(s.created_at)
+        sessionDate.setHours(0, 0, 0, 0)
+        return sessionDate.getTime() === date.getTime()
+      })
+
+      days.push({
+        label: date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0),
+        hasSession: !!daySession,
+        isToday: i === 0,
+        response: daySession?.dog_response
+      })
+    }
+    return days
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <p className="text-amber-800">Loading...</p>
       </div>
     )
   }
 
+  const weekProgress = getWeekProgress()
+  const dog = dogs[0]
+
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🐾 PawCalm Dashboard
+          <h1 className="text-3xl font-bold text-amber-950 mb-1">
+            {dog ? `Hey, ${dog.name}'s human! 👋` : '🐾 PawCalm Dashboard'}
           </h1>
-          <p className="text-gray-600">
-            Manage your dogs and track their progress
+          <p className="text-amber-800/70">
+            {todayComplete 
+              ? "Great job completing today's mission!" 
+              : "Ready for today's training?"}
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 mb-8">
-          <button
-            onClick={() => window.location.href = '/onboarding'}
-            className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition"
+        {/* Streak & Week Progress */}
+        {dog && (
+          <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm text-amber-700/70">Current Streak</p>
+                <p className="text-4xl font-bold text-amber-600">
+                  {streak} <span className="text-2xl">🔥</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-amber-700/70">Sessions Total</p>
+                <p className="text-4xl font-bold text-amber-950">{sessions.length}</p>
+              </div>
+            </div>
+
+            {/* Week dots */}
+            <div className="flex justify-between">
+              {weekProgress.map((day, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                      day.hasSession
+                        ? day.response === 'great'
+                          ? 'bg-green-500 text-white'
+                          : day.response === 'okay'
+                          ? 'bg-amber-400 text-white'
+                          : 'bg-red-400 text-white'
+                        : day.isToday
+                        ? 'bg-amber-100 border-2 border-amber-400 text-amber-700'
+                        : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {day.hasSession ? '✓' : day.label}
+                  </div>
+                  {day.isToday && (
+                    <span className="text-xs text-amber-600 mt-1">Today</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {!todayComplete && (
+              <div className="mt-4 pt-4 border-t border-amber-100">
+                <p className="text-sm text-amber-800/70 text-center">
+                  {streak > 0 
+                    ? `Complete today's mission to keep your ${streak}-day streak! 🔥`
+                    : "Start your streak with today's mission!"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main CTA */}
+        {dog && (
+          <Link
+            href="/mission"
+            className={`block w-full text-center py-5 rounded-2xl font-semibold text-lg transition-all mb-6 ${
+              todayComplete
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-amber-600 text-white hover:bg-amber-700 hover:scale-[1.02]'
+            }`}
           >
-            + Add New Dog
-          </button>
-          <button
-            onClick={() => window.location.href = '/videos'}
-            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 transition"
+            {todayComplete ? '✓ Today Complete — Do Another?' : "Start Today's Mission →"}
+          </Link>
+        )}
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <Link
+            href="/progress"
+            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
-            🎥 Training Videos
-          </button>
-          <button
-            onClick={() => window.location.href = '/progress'}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+            <span className="text-2xl mb-2 block">📊</span>
+            <span className="text-amber-950 font-medium">View Progress</span>
+          </Link>
+          <Link
+            href="/videos"
+            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
-            📊 Progress
-          </button>
+            <span className="text-2xl mb-2 block">🎥</span>
+            <span className="text-amber-950 font-medium">Training Videos</span>
+          </Link>
         </div>
 
-        {/* Dogs List */}
+        {/* Dog Card */}
         {dogs.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <p className="text-gray-500 text-lg">No dogs yet!</p>
-            <p className="text-gray-400">Add your first dog to get started.</p>
+          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <p className="text-amber-800 text-lg mb-2">No dogs yet!</p>
+            <p className="text-amber-700/70 mb-6">Add your first dog to get started.</p>
+            <Link
+              href="/onboarding"
+              className="inline-block bg-amber-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-amber-700 transition"
+            >
+              + Add Your Dog
+            </Link>
           </div>
         ) : (
-          <div className="grid gap-6">
-            {dogs.map((dog) => (
-              <div
-                key={dog.id}
-                className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-1">
-                      {dog.name}
-                    </h2>
-                    <p className="text-gray-600 mb-4">
-                      {dog.breed} • {dog.age}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">Baseline</p>
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {dog.baseline} min
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-gray-500 mb-1">Behavior when alone:</p>
-                  <p className="text-gray-700">{dog.behavior}</p>
-                </div>
-
-                <button 
-                  onClick={() => window.location.href = '/mission'}
-                  className="w-full bg-emerald-100 text-emerald-700 py-3 rounded-lg font-semibold hover:bg-emerald-200 transition"
-                >
-                  View Training Plan →
-                </button>
+          <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-amber-950 mb-1">{dog.name}</h2>
+                <p className="text-amber-700/70">{dog.breed} • {dog.age}</p>
               </div>
-            ))}
+              <div className="text-right">
+                <p className="text-xs text-amber-700/70">Baseline</p>
+                <p className="text-xl font-bold text-amber-600">{dog.baseline} min</p>
+              </div>
+            </div>
+            
+            <div className="bg-amber-50 rounded-xl p-4 mb-4">
+              <p className="text-xs text-amber-700/70 mb-1">Behavior when alone:</p>
+              <p className="text-amber-900 text-sm">{dog.behavior}</p>
+            </div>
+
+            {sessions.length >= 5 && (
+              <div className="bg-blue-50 rounded-xl p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>💡 Tip:</strong> Based on {sessions.length} sessions, {dog.name} responds best when you stay calm and move slowly. Keep it up!
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Add Another Dog */}
+        {dogs.length > 0 && (
+          <div className="mt-6 text-center">
+            <Link href="/onboarding" className="text-amber-600 hover:underline text-sm">
+              + Add another dog
+            </Link>
           </div>
         )}
       </div>

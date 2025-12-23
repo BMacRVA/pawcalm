@@ -1,27 +1,32 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../supabase'
 
 type Session = {
   id: string
   created_at: string
-  duration: number
-  target_duration: number
-  stress_level: number
-  success: boolean
+  mission_title: string
+  dog_response: string
+  owner_feeling: string
+  steps_completed: number
+  steps_total: number
+  outcome: string
   notes: string
 }
 
 type Dog = {
+  id: string
   name: string
-  baseline: number
+  created_at: string
 }
 
 export default function ProgressPage() {
-  const [sessions, setSessions] = useState<Session[]>([])
   const [dog, setDog] = useState<Dog | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
+  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
     fetchData()
@@ -29,13 +34,11 @@ export default function ProgressPage() {
 
   const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
-
     if (!user) {
       window.location.href = '/login'
       return
     }
 
-    // Fetch dog
     const { data: dogData } = await supabase
       .from('dogs')
       .select('*')
@@ -45,139 +48,243 @@ export default function ProgressPage() {
 
     if (dogData) {
       setDog(dogData)
+
+      const { data: sessionData } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('dog_id', dogData.id)
+        .order('created_at', { ascending: false })
+
+      if (sessionData) {
+        setSessions(sessionData)
+        calculateStreak(sessionData)
+      }
     }
-
-    // Fetch sessions
-    const { data: sessionData } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (sessionData) {
-      setSessions(sessionData)
-    }
-
     setLoading(false)
   }
 
-  const successCount = sessions.filter(s => s.success).length
-  const avgDuration = sessions.length > 0
-    ? Math.round(sessions.reduce((sum, s) => sum + s.duration, 0) / sessions.length)
-    : 0
-  const avgStress = sessions.length > 0
-    ? (sessions.reduce((sum, s) => sum + s.stress_level, 0) / sessions.length).toFixed(1)
-    : 0
+  const calculateStreak = (sessions: Session[]) => {
+    if (sessions.length === 0) {
+      setStreak(0)
+      return
+    }
+
+    let currentStreak = 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const sessionDates = sessions.map(s => {
+      const d = new Date(s.created_at)
+      d.setHours(0, 0, 0, 0)
+      return d.getTime()
+    })
+
+    const uniqueDates = [...new Set(sessionDates)].sort((a, b) => b - a)
+
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const expectedDate = new Date(today)
+      expectedDate.setDate(expectedDate.getDate() - i)
+      expectedDate.setHours(0, 0, 0, 0)
+
+      if (uniqueDates[i] === expectedDate.getTime()) {
+        currentStreak++
+      } else if (i === 0 && uniqueDates[i] === expectedDate.getTime() - 86400000) {
+        // Allow for yesterday if no session today yet
+        currentStreak++
+      } else {
+        break
+      }
+    }
+
+    setStreak(currentStreak)
+  }
+
+  const getWeekNumber = (date: Date, startDate: Date) => {
+    const diff = date.getTime() - startDate.getTime()
+    return Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1
+  }
+
+  const getAnxietyScore = (sessions: Session[]) => {
+    if (sessions.length === 0) return null
+    const recentSessions = sessions.slice(0, 5)
+    const scores = recentSessions.map(s => {
+      if (s.dog_response === 'great') return 2
+      if (s.dog_response === 'okay') return 5
+      return 8
+    })
+    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+  }
+
+  const getProgressMessage = () => {
+    if (sessions.length === 0) return "Complete your first mission to start tracking progress!"
+    if (sessions.length < 5) return "Keep going! We need a few more sessions to show trends."
+    
+    const recentScore = getAnxietyScore(sessions.slice(0, 5))
+    const olderScore = getAnxietyScore(sessions.slice(5, 10))
+    
+    if (!olderScore) return "Great start! Keep building consistency."
+    if (recentScore && recentScore < olderScore) return `${dog?.name} is improving! Anxiety score dropped from ${olderScore} to ${recentScore}.`
+    if (recentScore === olderScore) return "Holding steady. Consistency is key — keep it up!"
+    return "Some ups and downs are normal. Check the tips below."
+  }
+
+  const getLast14Days = () => {
+    const days = []
+    for (let i = 13; i >= 0; i--) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      date.setHours(0, 0, 0, 0)
+      
+      const daySession = sessions.find(s => {
+        const sessionDate = new Date(s.created_at)
+        sessionDate.setHours(0, 0, 0, 0)
+        return sessionDate.getTime() === date.getTime()
+      })
+
+      days.push({
+        date,
+        hasSession: !!daySession,
+        response: daySession?.dog_response || null
+      })
+    }
+    return days
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <p className="text-amber-800">Loading...</p>
       </div>
     )
   }
 
+  const anxietyScore = getAnxietyScore(sessions)
+  const last14Days = getLast14Days()
+  const completionRate = sessions.length > 0
+    ? Math.round((sessions.filter(s => s.outcome === 'success').length / sessions.length) * 100)
+    : 0
+
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="mb-6">
-          <a href="/dashboard" className="text-emerald-600 hover:underline">
-            ← Back to Dashboard
-          </a>
+          <Link href="/dashboard" className="text-amber-600 hover:underline">← Back to Dashboard</Link>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            📊 {dog?.name}'s Progress
-          </h1>
-          <p className="text-gray-600">
-            Started at {dog?.baseline} minutes baseline
-          </p>
+        <h1 className="text-3xl font-bold text-amber-950 mb-2">{dog?.name}'s Progress</h1>
+        <p className="text-amber-800/70 mb-8">{getProgressMessage()}</p>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
+            <p className="text-3xl font-bold text-amber-600">{streak}</p>
+            <p className="text-sm text-amber-800/70">Day Streak 🔥</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
+            <p className="text-3xl font-bold text-amber-600">{sessions.length}</p>
+            <p className="text-sm text-amber-800/70">Sessions</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 text-center border border-amber-100 shadow-sm">
+            <p className="text-3xl font-bold text-amber-600">{anxietyScore || '—'}</p>
+            <p className="text-sm text-amber-800/70">Anxiety Score</p>
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-600">{sessions.length}</p>
-            <p className="text-sm text-gray-500">Sessions</p>
+        {/* 14-Day Activity */}
+        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm mb-8">
+          <h2 className="font-bold text-amber-950 mb-4">Last 14 Days</h2>
+          <div className="flex gap-1 justify-between">
+            {last14Days.map((day, i) => (
+              <div key={i} className="flex flex-col items-center">
+                <div
+                  className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs ${
+                    day.hasSession
+                      ? day.response === 'great'
+                        ? 'bg-green-500 text-white'
+                        : day.response === 'okay'
+                        ? 'bg-amber-400 text-white'
+                        : 'bg-red-400 text-white'
+                      : 'bg-gray-100 text-gray-400'
+                  }`}
+                >
+                  {day.hasSession ? (
+                    day.response === 'great' ? '★' : day.response === 'okay' ? '•' : '~'
+                  ) : ''}
+                </div>
+                <span className="text-xs text-amber-700/50 mt-1">
+                  {day.date.getDate()}
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-600">{successCount}</p>
-            <p className="text-sm text-gray-500">Successful</p>
+          <div className="flex justify-center gap-6 mt-4 text-xs text-amber-700/70">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span> Great</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-amber-400 rounded"></span> Okay</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded"></span> Struggled</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-gray-100 rounded"></span> No session</span>
           </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-600">{avgDuration}m</p>
-            <p className="text-sm text-gray-500">Avg Duration</p>
+        </div>
+
+        {/* Why Setbacks Are Normal */}
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8">
+          <h2 className="font-bold text-blue-900 mb-3">💙 Why Setbacks Are Normal</h2>
+          <div className="space-y-3 text-blue-800 text-sm">
+            <p>
+              <strong>Dog anxiety isn't linear.</strong> Your dog might do great for 5 days, then have a rough day. This is completely normal and expected.
+            </p>
+            <p>
+              <strong>Common setback triggers:</strong>
+            </p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li>Changes in routine (guests, travel, new schedule)</li>
+              <li>Weather changes or loud noises</li>
+              <li>Your own stress (dogs pick up on it!)</li>
+              <li>Pushing too fast too soon</li>
+            </ul>
+            <p>
+              <strong>What to do:</strong> When setbacks happen, go back one step in difficulty. Rebuild confidence, then progress again. Two steps forward, one step back is still progress!
+            </p>
           </div>
         </div>
 
         {/* Session History */}
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Session History</h2>
-
+        <div className="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm">
+          <h2 className="font-bold text-amber-950 mb-4">Recent Sessions</h2>
           {sessions.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">No sessions logged yet</p>
-              <button
-                onClick={() => window.location.href = '/log-session'}
-                className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-emerald-700 transition"
-              >
-                Log Your First Session
-              </button>
-            </div>
+            <p className="text-amber-700/70 text-center py-8">No sessions yet. Complete your first mission!</p>
           ) : (
-            <div className="space-y-4">
-              {sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="border-2 border-gray-100 rounded-lg p-4"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {session.duration} min
-                        <span className="text-gray-400 font-normal">
-                          {' '}/ {session.target_duration} min target
-                        </span>
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(session.created_at).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      session.success
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
-                      {session.success ? '✓ Success' : '✗ Needs Work'}
-                    </div>
+            <div className="space-y-3">
+              {sessions.slice(0, 10).map((session) => (
+                <div key={session.id} className="flex items-center gap-4 p-3 bg-amber-50 rounded-xl">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                    session.dog_response === 'great' ? 'bg-green-100' :
+                    session.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
+                  }`}>
+                    {session.dog_response === 'great' ? '🌟' :
+                     session.dog_response === 'okay' ? '😐' : '😰'}
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <span>Stress: {session.stress_level}/10</span>
-                  </div>
-                  {session.notes && (
-                    <p className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                      {session.notes}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-amber-950 truncate">{session.mission_title || 'Training Session'}</p>
+                    <p className="text-sm text-amber-700/70">
+                      {new Date(session.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {session.steps_total > 0 && ` • ${session.steps_completed}/${session.steps_total} steps`}
                     </p>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <button
-          onClick={() => window.location.href = '/log-session'}
-          className="w-full mt-6 bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition"
-        >
-          + Log New Session
-        </button>
+        {/* CTA */}
+        <div className="mt-8 text-center">
+          <Link
+            href="/mission"
+            className="inline-block bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 rounded-xl font-semibold transition-all hover:scale-105"
+          >
+            Start Today's Mission →
+          </Link>
+        </div>
       </div>
     </div>
   )
