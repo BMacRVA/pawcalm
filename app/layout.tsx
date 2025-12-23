@@ -1,88 +1,41 @@
-import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import Script from "next/script";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "PawCalm - AI Dog Separation Anxiety Training",
-  description: "Calm your anxious dog in 5 minutes a day. AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-  keywords: ["dog anxiety", "separation anxiety", "dog training", "pet behavior", "dog calm"],
-  authors: [{ name: "PawCalm" }],
-  openGraph: {
-    title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
-    description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-    url: "https://pawcalm.ai",
-    siteName: "PawCalm",
-    images: [
-      {
-        url: "https://pawcalm.ai/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "PawCalm - AI Dog Separation Anxiety Training",
-      },
-    ],
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "PawCalm - Calm Your Anxious Dog in 5 Min/Day",
-    description: "AI-powered daily missions personalized for your dog's anxiety triggers. Free during beta.",
-    images: ["https://pawcalm.ai/og-image.png"],
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+  title: 'PawCalm - AI-Powered Dog Separation Anxiety Training',
+  description: 'Help your dog overcome separation anxiety with personalized AI-guided training missions.',
+}
+
+const instaUrl = "https://instagram.com/pawcalm.ai"
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <head>
-        <Script
-          src="https://cdn.jsdelivr.net/npm/@mux/mux-player@2"
-          strategy="beforeInteractive"
-        />
-        <link rel="icon" href="/favicon.ico" />
-      </head>
-      <body className="flex flex-col min-h-screen">
+      <body className={`${inter.className} flex flex-col min-h-screen`}>
         <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
-          🚧 Beta - We're actively building PawCalm. Expect bugs & changes!
+          Beta - Follow us on Instagram{' '}
+          <a href={instaUrl} target="_blank" className="underline">
+            @pawcalm.ai
+          </a>
         </div>
-        <main className="flex-grow">
-          {children}
-        </main>
-        <footer className="bg-gray-900 text-gray-400 py-8 px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="text-center md:text-left">
-                <p className="text-white font-semibold">🐾 PawCalm</p>
-                <p className="text-sm">AI-assisted dog separation anxiety training</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-4 text-sm">
-                <a href="/terms" className="hover:text-white transition">Terms of Service</a>
-                <a href="/privacy" className="hover:text-white transition">Privacy Policy</a>
-                <a href="/disclaimer" className="hover:text-white transition">Disclaimer</a>
-              </div>
-            </div>
-            <div className="mt-6 pt-6 border-t border-gray-800 text-center text-sm">
-              <p>© 2025 PawCalm. All rights reserved.</p>
-              <p className="mt-2 text-xs text-gray-500">
-                PawCalm provides AI-generated suggestions for informational purposes only. 
-                Not a substitute for professional veterinary or behavioral advice.
-              </p>
-            </div>
-          </div>
-        </footer>
+        <main className="flex-grow">{children}</main>
+        <div className="bg-amber-50 text-center py-4 text-sm text-amber-700">
+          <a href={instaUrl} target="_blank" className="hover:underline">
+            Follow us on Instagram @pawcalm.ai
+          </a>
+        </div>
         <Analytics />
         <SpeedInsights />
       </body>
     </html>
-  );
+  )
 }
