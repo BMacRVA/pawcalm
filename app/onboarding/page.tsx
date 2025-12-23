@@ -43,7 +43,7 @@ export default function OnboardingPage() {
       console.error('Error:', error)
       alert('Error saving: ' + error.message)
     } else {
-      window.location.href = '/dashboard'
+      window.location.href = '/welcome'
     }
   }
 

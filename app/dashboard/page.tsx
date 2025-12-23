@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../supabase'
+import Celebration from '../components/Celebration'
+import FeedbackButton from '../components/FeedbackButton'
+import ShareProgress from '../components/ShareProgress'
+import WeeklySummary from '../components/WeeklySummary'
+import { useCelebrations } from '../hooks/useCelebrations'
 
 type Dog = {
   id: string
@@ -26,6 +31,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [streak, setStreak] = useState(0)
   const [todayComplete, setTodayComplete] = useState(false)
+  const [weeklyStats, setWeeklyStats] = useState({ sessions: 0, greatCount: 0 })
+  const [trend, setTrend] = useState<'improving' | 'stable' | 'declining' | 'new'>('new')
+  
+  const dog = dogs[0]
+  const { celebration, clearCelebration } = useCelebrations(dog?.id || null)
 
   useEffect(() => {
     fetchData()
@@ -57,6 +67,8 @@ export default function DashboardPage() {
       if (sessionData) {
         setSessions(sessionData)
         calculateStreak(sessionData)
+        calculateWeeklyStats(sessionData)
+        calculateTrend(sessionData)
       }
     } else {
       setDogs([])
@@ -73,7 +85,6 @@ export default function DashboardPage() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // Check if there's a session today
     const todaySession = sessions.find(s => {
       const sessionDate = new Date(s.created_at)
       sessionDate.setHours(0, 0, 0, 0)
@@ -81,7 +92,6 @@ export default function DashboardPage() {
     })
     setTodayComplete(!!todaySession)
 
-    // Calculate streak
     let currentStreak = 0
     const sessionDates = sessions.map(s => {
       const d = new Date(s.created_at)
@@ -99,7 +109,6 @@ export default function DashboardPage() {
       if (uniqueDates[i] === expectedDate.getTime()) {
         currentStreak++
       } else if (i === 0) {
-        // Check if yesterday counts (no session today yet)
         const yesterday = new Date(today)
         yesterday.setDate(yesterday.getDate() - 1)
         if (uniqueDates[i] === yesterday.getTime()) {
@@ -113,6 +122,44 @@ export default function DashboardPage() {
     }
 
     setStreak(currentStreak)
+  }
+
+  const calculateWeeklyStats = (sessions: Session[]) => {
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    
+    const weeklySessions = sessions.filter(s => new Date(s.created_at) >= weekAgo)
+    const greatCount = weeklySessions.filter(s => s.dog_response === 'great').length
+
+    setWeeklyStats({
+      sessions: weeklySessions.length,
+      greatCount
+    })
+  }
+
+  const calculateTrend = (sessions: Session[]) => {
+    if (sessions.length < 5) {
+      setTrend('new')
+      return
+    }
+
+    const recent = sessions.slice(0, 5)
+    const older = sessions.slice(5, 10)
+
+    const recentScore = recent.reduce((sum, s) => 
+      sum + (s.dog_response === 'great' ? 1 : s.dog_response === 'okay' ? 0 : -1), 0) / recent.length
+
+    if (older.length === 0) {
+      setTrend('new')
+      return
+    }
+
+    const olderScore = older.reduce((sum, s) => 
+      sum + (s.dog_response === 'great' ? 1 : s.dog_response === 'okay' ? 0 : -1), 0) / older.length
+
+    if (recentScore > olderScore + 0.2) setTrend('improving')
+    else if (recentScore < olderScore - 0.2) setTrend('declining')
+    else setTrend('stable')
   }
 
   const getWeekProgress = () => {
@@ -149,11 +196,18 @@ export default function DashboardPage() {
   }
 
   const weekProgress = getWeekProgress()
-  const dog = dogs[0]
+  const improvementText = trend === 'improving' ? '📈 Trending up!' : 
+                          trend === 'stable' ? '➡️ Holding steady' : 
+                          trend === 'declining' ? '📉 Working through a tough patch' : '🌱 Just getting started'
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Celebration Modal */}
+        {celebration && dog && (
+          <Celebration type={celebration} dogName={dog.name} onClose={clearCelebration} />
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-amber-950 mb-1">
@@ -234,6 +288,31 @@ export default function DashboardPage() {
           </Link>
         )}
 
+        {/* Weekly Summary */}
+        {dog && sessions.length > 0 && (
+          <div className="mb-6">
+            <WeeklySummary
+              dogName={dog.name}
+              sessions={weeklyStats.sessions}
+              greatCount={weeklyStats.greatCount}
+              streak={streak}
+              trend={trend}
+            />
+          </div>
+        )}
+
+        {/* Share Progress */}
+        {dog && sessions.length >= 3 && (
+          <div className="mb-6">
+            <ShareProgress
+              dogName={dog.name}
+              streak={streak}
+              sessions={sessions.length}
+              improvement={improvementText}
+            />
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <Link
@@ -277,18 +356,10 @@ export default function DashboardPage() {
               </div>
             </div>
             
-            <div className="bg-amber-50 rounded-xl p-4 mb-4">
+            <div className="bg-amber-50 rounded-xl p-4">
               <p className="text-xs text-amber-700/70 mb-1">Behavior when alone:</p>
               <p className="text-amber-900 text-sm">{dog.behavior}</p>
             </div>
-
-            {sessions.length >= 5 && (
-              <div className="bg-blue-50 rounded-xl p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>💡 Tip:</strong> Based on {sessions.length} sessions, {dog.name} responds best when you stay calm and move slowly. Keep it up!
-                </p>
-              </div>
-            )}
           </div>
         )}
 
@@ -301,6 +372,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Feedback Button */}
+      <FeedbackButton />
     </div>
   )
 }
