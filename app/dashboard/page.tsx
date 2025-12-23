@@ -314,27 +314,34 @@ export default function DashboardPage() {
         )}
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-3 mb-8">
           <Link
             href="/progress"
             className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
             <span className="text-2xl mb-2 block">📊</span>
-            <span className="text-amber-950 font-medium text-sm">Progress</span>
+            <span className="text-amber-950 font-medium text-xs">Progress</span>
           </Link>
           <Link
             href="/camera-setup"
             className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
             <span className="text-2xl mb-2 block">📹</span>
-            <span className="text-amber-950 font-medium text-sm">Camera</span>
+            <span className="text-amber-950 font-medium text-xs">Camera</span>
           </Link>
           <Link
             href="/videos"
             className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
           >
             <span className="text-2xl mb-2 block">🎥</span>
-            <span className="text-amber-950 font-medium text-sm">Videos</span>
+            <span className="text-amber-950 font-medium text-xs">Videos</span>
+          </Link>
+          <Link
+            href="/settings"
+            className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm hover:shadow-md transition text-center"
+          >
+            <span className="text-2xl mb-2 block">⚙️</span>
+            <span className="text-amber-950 font-medium text-xs">Settings</span>
           </Link>
         </div>
 
