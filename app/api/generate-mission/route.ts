@@ -8,23 +8,21 @@ const openai = new OpenAI({
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 export async function POST(request: Request) {
   try {
     const { dog, recentSessions, ownerState } = await request.json()
 
-    console.log('Generating mission for:', dog.name)
-
-    // Fetch additional training data
+    // Fetch cue practices and video analyses
     const [cuePracticesRes, videoAnalysesRes] = await Promise.all([
       supabase
         .from('cue_practices')
         .select('*')
         .eq('dog_id', dog.id)
         .order('created_at', { ascending: false })
-        .limit(10),
+        .limit(30),
       supabase
         .from('video_analyses')
         .select('*')
@@ -37,13 +35,55 @@ export async function POST(request: Request) {
     const cuePractices = cuePracticesRes.data || []
     const videoAnalyses = videoAnalysesRes.data || []
 
+    // ===== ANALYZE CUES =====
+    const cueHistory: Record<string, { 
+      calm: number
+      noticed: number
+      anxious: number
+      total: number 
+    }> = {}
+    
+    cuePractices.forEach((practice: any) => {
+      practice.cues?.forEach((cue: any) => {
+        if (!cueHistory[cue.cue_name]) {
+          cueHistory[cue.cue_name] = { calm: 0, noticed: 0, anxious: 0, total: 0 }
+        }
+        cueHistory[cue.cue_name].total++
+        if (cue.response === 'calm') cueHistory[cue.cue_name].calm++
+        if (cue.response === 'noticed') cueHistory[cue.cue_name].noticed++
+        if (cue.response === 'anxious') cueHistory[cue.cue_name].anxious++
+      })
+    })
+
+    const masteredCues: string[] = []
+    const workingOnCues: string[] = []
+    const stressfulCues: string[] = []
+
+    Object.entries(cueHistory).forEach(([name, stats]) => {
+      const calmRate = stats.calm / stats.total
+      if (stats.total >= 2 && calmRate >= 0.7) {
+        masteredCues.push(name)
+      } else if (calmRate < 0.3) {
+        stressfulCues.push(name)
+      } else {
+        workingOnCues.push(name)
+      }
+    })
+
+    // ===== CHECK READINESS =====
+    if (masteredCues.length < 3) {
+      return NextResponse.json({ 
+        error: 'Not ready for absence training',
+        masteredCues: masteredCues.length,
+        needed: 3 - masteredCues.length
+      }, { status: 400 })
+    }
+
     // ===== ANALYZE SESSIONS =====
-    let sessionContext = "No previous sessions recorded yet - this is their first mission."
-    let progressTrend = "just starting"
-    let recentStruggleCount = 0
-    let recentGreatCount = 0
+    let sessionContext = ""
     let consecutiveStruggles = 0
-    let lastSessionWasStruggle = false
+    let recentGreatCount = 0
+    let recentStruggleCount = 0
     let whatWorked: string[] = []
     let whatDidntWork: string[] = []
 
@@ -51,7 +91,7 @@ export async function POST(request: Request) {
       const last5 = recentSessions.slice(0, 5)
       recentGreatCount = last5.filter((s: any) => s.dog_response === 'great').length
       recentStruggleCount = last5.filter((s: any) => s.dog_response === 'struggled').length
-      
+
       for (const session of recentSessions) {
         if (session.dog_response === 'struggled') {
           consecutiveStruggles++
@@ -59,10 +99,7 @@ export async function POST(request: Request) {
           break
         }
       }
-      
-      lastSessionWasStruggle = recentSessions[0]?.dog_response === 'struggled'
-      
-      // Extract what worked and what didn't
+
       recentSessions.forEach((s: any) => {
         if (s.dog_response === 'great' && s.mission_title) {
           whatWorked.push(s.mission_title)
@@ -71,234 +108,125 @@ export async function POST(request: Request) {
           whatDidntWork.push(s.mission_title)
         }
       })
-      
-      const older5 = recentSessions.slice(5, 10)
-      if (older5.length > 0) {
-        const recentScore = last5.reduce((sum: number, s: any) => {
-          if (s.dog_response === 'great') return sum + 2
-          if (s.dog_response === 'okay') return sum + 1
-          return sum - 1
-        }, 0) / last5.length
-        
-        const olderScore = older5.reduce((sum: number, s: any) => {
-          if (s.dog_response === 'great') return sum + 2
-          if (s.dog_response === 'okay') return sum + 1
-          return sum - 1
-        }, 0) / older5.length
-        
-        if (recentScore > olderScore + 0.3) progressTrend = "improving"
-        else if (recentScore < olderScore - 0.3) progressTrend = "struggling"
-        else progressTrend = "steady"
-      }
 
       const lastSession = recentSessions[0]
       sessionContext = `
-Recent training history (last ${recentSessions.length} sessions):
-- Great responses: ${recentGreatCount}/5 recent sessions
-- Struggled responses: ${recentStruggleCount}/5 recent sessions
-- Progress trend: ${progressTrend}
-- Last session: ${lastSession.dog_response || 'unknown'} response
+PREVIOUS SESSIONS (${recentSessions.length} total):
+- Recent results: ${recentGreatCount} great, ${recentStruggleCount} struggled in last 5
+- Last session: ${lastSession.dog_response}
 ${lastSession.mission_title ? `- Last mission: "${lastSession.mission_title}"` : ''}
-${lastSession.notes ? `- Owner notes from last session: "${lastSession.notes}"` : ''}
-${whatWorked.length > 0 ? `- MISSIONS THAT WORKED WELL: ${whatWorked.slice(0, 3).join(', ')}` : ''}
-${whatDidntWork.length > 0 ? `- MISSIONS THAT WERE TOO HARD: ${whatDidntWork.slice(0, 3).join(', ')}` : ''}
-${consecutiveStruggles >= 2 ? `⚠️ DOG HAS STRUGGLED ${consecutiveStruggles} SESSIONS IN A ROW - MUST REGRESS DIFFICULTY` : ''}`
+${lastSession.notes ? `- Owner observed: "${lastSession.notes}"` : ''}
+${whatWorked.length > 0 ? `- APPROACHES THAT WORKED: ${whatWorked.slice(0, 3).join(', ')}` : ''}
+${whatDidntWork.length > 0 ? `- APPROACHES TO AVOID: ${whatDidntWork.slice(0, 3).join(', ')}` : ''}
+${consecutiveStruggles >= 2 ? `⚠️ ${consecutiveStruggles} struggles in a row — significantly reduce difficulty` : ''}`
     }
 
-    // ===== ANALYZE CUE PRACTICES =====
-    let cueContext = ""
-    if (cuePractices.length > 0) {
-      const cueStats: Record<string, { calm: number; noticed: number; anxious: number }> = {}
-      
-      cuePractices.forEach((practice: any) => {
-        practice.cues?.forEach((cue: any) => {
-          if (!cueStats[cue.cue_name]) {
-            cueStats[cue.cue_name] = { calm: 0, noticed: 0, anxious: 0 }
-          }
-          if (cue.response === 'calm') cueStats[cue.cue_name].calm++
-          if (cue.response === 'noticed') cueStats[cue.cue_name].noticed++
-          if (cue.response === 'anxious') cueStats[cue.cue_name].anxious++
-        })
-      })
-
-      const stressfulCues: string[] = []
-      const masteredCues: string[] = []
-      const workingOnCues: string[] = []
-
-      Object.entries(cueStats).forEach(([name, stats]) => {
-        const total = stats.calm + stats.noticed + stats.anxious
-        const calmRate = stats.calm / total
-        const anxiousRate = stats.anxious / total
-        
-        if (calmRate >= 0.7) masteredCues.push(name)
-        else if (anxiousRate >= 0.5) stressfulCues.push(name)
-        else workingOnCues.push(name)
-      })
-
-      cueContext = `
-DEPARTURE CUE ANALYSIS (from ${cuePractices.length} practice sessions):
-${stressfulCues.length > 0 ? `- 🔴 STRESSFUL CUES (avoid or work on gently): ${stressfulCues.join(', ')}` : ''}
-${workingOnCues.length > 0 ? `- 🟡 WORKING ON: ${workingOnCues.join(', ')}` : ''}
-${masteredCues.length > 0 ? `- 🟢 MASTERED CUES (can incorporate): ${masteredCues.join(', ')}` : ''}
-${stressfulCues.length > 0 ? `⚠️ IMPORTANT: ${stressfulCues[0]} causes the most anxiety - consider including desensitization work for this cue.` : ''}`
-    }
-
-    // ===== ANALYZE VIDEO DATA =====
+    // ===== VIDEO INSIGHTS =====
     let videoContext = ""
     if (videoAnalyses.length > 0) {
-      const latestVideo = videoAnalyses[0]
-      const allTriggers: string[] = []
+      const allTriggers = videoAnalyses.flatMap((v: any) => v.triggers_detected || [])
+      const uniqueTriggers = [...new Set(allTriggers)]
       
-      videoAnalyses.forEach((v: any) => {
-        if (v.triggers_detected) {
-          allTriggers.push(...v.triggers_detected)
-        }
-      })
-      
-      const triggerCounts: Record<string, number> = {}
-      allTriggers.forEach(t => {
-        triggerCounts[t] = (triggerCounts[t] || 0) + 1
-      })
-      
-      const topTriggers = Object.entries(triggerCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([t]) => t)
-
-      // Determine anxiety trend from videos
-      let videoAnxietyTrend = "unknown"
-      if (videoAnalyses.length >= 2) {
-        const getLevel = (analysis: string) => {
-          const lower = analysis.toLowerCase()
-          if (lower.includes('none') || lower.includes('calm')) return 0
-          if (lower.includes('mild')) return 1
-          if (lower.includes('moderate')) return 2
-          return 3
-        }
-        const firstLevel = getLevel(videoAnalyses[videoAnalyses.length - 1].analysis || '')
-        const lastLevel = getLevel(videoAnalyses[0].analysis || '')
-        
-        if (lastLevel < firstLevel) videoAnxietyTrend = "improving"
-        else if (lastLevel > firstLevel) videoAnxietyTrend = "worsening"
-        else videoAnxietyTrend = "stable"
-      }
-
       videoContext = `
-VIDEO ANALYSIS INSIGHTS (from ${videoAnalyses.length} analyzed videos):
-- Most common triggers observed: ${topTriggers.join(', ') || 'none identified'}
-- Video anxiety trend: ${videoAnxietyTrend}
-- Latest video summary: ${latestVideo.analysis?.substring(0, 200) || 'No summary available'}...
-${topTriggers.length > 0 ? `⚠️ Consider incorporating work on these observed triggers: ${topTriggers.slice(0, 2).join(', ')}` : ''}`
+VIDEO OBSERVATIONS:
+- Triggers seen on camera: ${uniqueTriggers.join(', ') || 'none identified'}
+- Use this to inform which cues to incorporate or avoid`
     }
 
     // ===== OWNER STATE =====
     let ownerContext = ""
     if (ownerState) {
       ownerContext = `
-OWNER'S CURRENT STATE:
-- Mood: ${ownerState.mood || 'not specified'}
-- Energy level: ${ownerState.energy || 'not specified'}
-${ownerState.mood === 'anxious' ? '⚠️ Owner is feeling anxious - be extra gentle and reassuring in your tone.' : ''}
-${ownerState.energy === 'low' ? '⚠️ Owner has low energy - keep the mission simple, short, and achievable.' : ''}
-${ownerState.mood === 'confident' && ownerState.energy === 'high' ? '💪 Owner is feeling great - you can be slightly more ambitious.' : ''}`
+OWNER TODAY: ${ownerState.mood} mood, ${ownerState.energy} energy
+${ownerState.mood === 'anxious' || ownerState.energy === 'low' ? '→ Keep session simple and short' : ''}`
     }
 
-    // ===== SMART DIFFICULTY ADJUSTMENT =====
-    let targetMinutes = dog.baseline
-    let difficultyNote = ""
+    // ===== CALCULATE TARGET DURATION =====
+    let targetMinutes = dog.baseline || 5
     
     if (consecutiveStruggles >= 3) {
-      targetMinutes = Math.round(dog.baseline * 0.5)
-      difficultyNote = "MAJOR REGRESSION: Dog has struggled 3+ times. Go back to basics - make this very easy to rebuild confidence."
+      targetMinutes = Math.max(1, Math.round(targetMinutes * 0.5))
     } else if (consecutiveStruggles >= 2) {
-      targetMinutes = Math.round(dog.baseline * 0.7)
-      difficultyNote = "REGRESSION: Dog struggled twice in a row. Reduce difficulty significantly to rebuild confidence."
-    } else if (lastSessionWasStruggle) {
-      targetMinutes = Math.round(dog.baseline * 0.85)
-      difficultyNote = "SLIGHT REGRESSION: Last session was tough. Make today a bit easier."
+      targetMinutes = Math.max(1, Math.round(targetMinutes * 0.7))
+    } else if (consecutiveStruggles === 1) {
+      targetMinutes = Math.max(1, Math.round(targetMinutes * 0.85))
     } else if (recentGreatCount >= 4 && recentStruggleCount === 0) {
-      targetMinutes = Math.round(dog.baseline * 1.15)
-      difficultyNote = "PROGRESSION: Dog is doing great! Gently increase the challenge."
-    } else if (recentGreatCount >= 3) {
-      targetMinutes = Math.round(dog.baseline * 1.1)
-      difficultyNote = "SLIGHT PROGRESSION: Good progress. Small increase in difficulty."
+      targetMinutes = Math.round(targetMinutes * 1.15)
     }
     
     if (ownerState?.mood === 'anxious' || ownerState?.energy === 'low') {
       targetMinutes = Math.round(targetMinutes * 0.8)
-      difficultyNote += " OWNER ADJUSTMENT: Reduced due to owner's current state."
-    }
-    if (ownerState?.mood === 'confident' && ownerState?.energy === 'high' && !lastSessionWasStruggle) {
-      targetMinutes = Math.round(targetMinutes * 1.1)
     }
     
     targetMinutes = Math.max(1, Math.min(targetMinutes, 60))
 
-    // ===== BUILD PROMPT =====
-    const prompt = `You are an expert dog separation anxiety trainer that LEARNS from past data. Your job is to create a mission personalized to THIS specific dog's history.
+    // ===== BUILD THE PROMPT =====
+    const prompt = `You are an expert dog separation anxiety trainer. You create personalized absence training sessions based on each dog's specific progress with departure cues.
 
-DOG PROFILE:
-- Name: ${dog.name}
-- Breed: ${dog.breed} 
+DOG: ${dog.name}
+- Breed: ${dog.breed}
 - Age: ${dog.age}
-- Baseline alone tolerance: ${dog.baseline} minutes
-- Specific behaviors when alone: ${dog.behavior}
+- Baseline tolerance: ${dog.baseline} minutes
+- Behaviors when anxious: ${dog.behavior}
+
+CUE MASTERY STATUS:
+✅ MASTERED (build the session around these): ${masteredCues.join(', ')}
+🟡 WORKING ON (can include gently): ${workingOnCues.join(', ') || 'none'}
+🔴 STRESSFUL (avoid): ${stressfulCues.join(', ') || 'none'}
 
 ${sessionContext}
-
-${cueContext}
 
 ${videoContext}
 
 ${ownerContext}
 
-TODAY'S TARGET: ${targetMinutes} minutes
-${difficultyNote ? `\n⚠️ DIFFICULTY ADJUSTMENT: ${difficultyNote}` : ''}
+TODAY'S SESSION:
+- Target duration: ${targetMinutes} minutes
+- The departure routine MUST incorporate these mastered cues: ${masteredCues.slice(0, 3).join(', ')}
+${stressfulCues.length > 0 ? `- AVOID these triggers: ${stressfulCues.join(', ')}` : ''}
 
-IMPORTANT INSTRUCTIONS FOR PERSONALIZATION:
-1. If certain mission types worked well before, consider similar approaches
-2. If certain mission types failed, try a different approach
-3. If specific cues cause stress, incorporate gentle desensitization OR avoid them
-4. If video analysis shows specific triggers, address them in the mission
-5. Reference ${dog.name}'s actual history in your ownerMindset message to show you "remember"
+Generate a personalized absence training session.
 
-Generate a personalized training mission.
-${consecutiveStruggles >= 2 ? 'CRITICAL: This dog has been struggling. Today\'s mission MUST be significantly easier - focus on rebuilding confidence, not pushing forward.' : ''}
+CRITICAL INSTRUCTIONS:
+1. The session steps MUST use the specific mastered cues (${masteredCues.slice(0, 3).join(', ')})
+2. Create a natural departure routine that incorporates those cues
+3. If certain approaches worked before, use similar strategies
+4. If certain approaches failed, try something different
+5. Be specific — mention ${dog.name}'s mastered cues by name in the steps
+6. The owner WILL actually leave for ${targetMinutes} minutes
 
-Respond with this exact JSON structure:
+Respond with this exact JSON:
 {
-  "title": "Creative, encouraging mission title that reflects the specific focus",
+  "title": "Engaging title for this absence session",
   "targetMinutes": ${targetMinutes},
-  "ownerMindset": "A personalized message that references ${dog.name}'s actual progress and history. Mention specific wins or challenges from their data.",
+  "cuesIncorporated": [${masteredCues.slice(0, 3).map(c => `"${c}"`).join(', ')}],
+  "ownerMindset": "Personalized encouragement referencing their progress with specific cues they've mastered",
   "preparation": [
-    "Specific prep step 1 (mention ${dog.name} by name)",
-    "Specific prep step 2",
-    "Specific prep step 3"
+    "Prep step mentioning ${dog.name}",
+    "Prep step 2",
+    "Prep step 3"
   ],
   "steps": [
-    "Detailed step 1 with exact timing",
-    "Detailed step 2 - incorporate learnings from past sessions",
-    "Detailed step 3 - address specific triggers if identified",
-    "Detailed step 4",
-    "Detailed step 5 with clear success criteria"
+    "Step using ${masteredCues[0] || 'first mastered cue'}",
+    "Step using ${masteredCues[1] || 'second mastered cue'}",
+    "Step using ${masteredCues[2] || 'third mastered cue'} and leaving",
+    "What to do during the ${targetMinutes} minutes away",
+    "Calm return protocol"
   ],
   "ownerTips": [
-    "Coaching tip for the owner",
-    "What to do if they feel anxious",
-    "How to stay calm"
+    "Tip based on their dog's specific patterns",
+    "Tip for staying calm during the absence"
   ],
   "dogTips": [
-    "Breed-specific tip for ${dog.breed}",
-    "Age-appropriate tip for ${dog.age} dog"
+    "Breed-specific insight for ${dog.breed}",
+    "Age-appropriate tip"
   ],
-  "successLooksLike": "Specific description of success that accounts for ${dog.name}'s current level",
-  "ifStruggles": "Exactly what to do if ${dog.name} shows stress - be specific based on their known triggers",
-  "celebration": "How to celebrate - important for confidence"
+  "successLooksLike": "Specific success criteria for a ${targetMinutes}-minute absence",
+  "ifStruggles": "What to do if ${dog.name} shows stress — specific to their known triggers",
+  "celebration": "How to celebrate after a successful absence"
 }
 
-Be warm, specific, and show that you've LEARNED from their history. Use ${dog.name}'s name throughout.
-
-Only respond with valid JSON, no markdown, no backticks.`
+Only respond with valid JSON.`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -307,8 +235,6 @@ Only respond with valid JSON, no markdown, no backticks.`
     })
 
     const content = completion.choices[0].message.content || '{}'
-    console.log('OpenAI response:', content)
-    
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     const mission = JSON.parse(cleanContent)
 

@@ -134,101 +134,22 @@ export default function ProgressPage() {
         {!hasData ? (
           <div className="bg-white rounded-2xl p-8 border border-amber-100 text-center">
             <span className="text-4xl mb-3 block">🐕</span>
-            <p className="text-amber-700 mb-4">Complete a session to start tracking</p>
-            <Link href="/mission" className="bg-amber-600 text-white px-6 py-2 rounded-lg font-medium">
-              Start Session
+            <p className="text-amber-700 mb-4">Start with cue practice to begin tracking</p>
+            <Link href="/departure-practice" className="bg-amber-600 text-white px-6 py-2 rounded-lg font-medium">
+              Practice Cues
             </Link>
           </div>
         ) : (
           <>
-            {/* Sessions */}
+            {/* Step 1: Cues */}
             <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-              <p className="text-sm font-medium text-amber-950 mb-3">
-                Sessions <span className="font-normal text-amber-500">({sessions.length})</span>
-              </p>
-              
-              {sessions.length === 0 ? (
-                <p className="text-amber-400 text-sm">No sessions yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {sessions.slice(0, 5).map((s) => (
-                    <div key={s.id}>
-                      <button
-                        onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
-                            s.dog_response === 'great' ? 'bg-green-100' :
-                            s.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
-                          }`}>
-                            {s.dog_response === 'great' ? '😊' : s.dog_response === 'okay' ? '😐' : '😟'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-amber-950 truncate">
-                              {s.mission_title || 'Training Session'}
-                            </p>
-                            <p className="text-xs text-amber-500">
-                              {new Date(s.created_at).toLocaleDateString('en-US', { 
-                                month: 'short', day: 'numeric' 
-                              })}
-                              {s.steps_total > 0 && ` • ${s.steps_completed}/${s.steps_total} steps`}
-                            </p>
-                          </div>
-                          <span className="text-amber-400 text-xs">
-                            {expandedSession === s.id ? '▲' : '▼'}
-                          </span>
-                        </div>
-                      </button>
-                      
-                      {expandedSession === s.id && (
-                        <div className="ml-11 mt-1 p-3 bg-amber-50 rounded-lg text-sm space-y-2">
-                          <p className="text-amber-700">
-                            <span className="font-medium">Result:</span>{' '}
-                            {s.dog_response === 'great' ? '😊 Did great!' : 
-                             s.dog_response === 'okay' ? '😐 Okay with some stress' : '😟 Struggled'}
-                          </p>
-                          
-                          {/* Show steps if available */}
-                          {s.mission_steps && s.mission_steps.length > 0 && (
-                            <div>
-                              <p className="text-amber-700 font-medium text-xs mb-1">Steps tried:</p>
-                              <ul className="text-xs text-amber-600 space-y-1">
-                                {s.mission_steps.map((step, i) => (
-                                  <li key={i} className="flex items-start gap-2">
-                                    <span className={i < s.steps_completed ? 'text-green-500' : 'text-amber-400'}>
-                                      {i < s.steps_completed ? '✓' : '○'}
-                                    </span>
-                                    <span className={i < s.steps_completed ? '' : 'opacity-60'}>
-                                      {step}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {s.notes && (
-                            <p className="text-amber-600 text-xs italic border-t border-amber-200 pt-2">
-                              "{s.notes}"
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {sessions.length > 5 && (
-                    <p className="text-xs text-amber-500 text-center pt-2">
-                      +{sessions.length - 5} more sessions
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Cue Status */}
-            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-              <p className="text-sm font-medium text-amber-950 mb-3">Departure Cues</p>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-6 h-6 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center font-bold">1</span>
+                <p className="text-sm font-medium text-amber-950">Departure Cues</p>
+                {Object.keys(cueAnalysis).length > 0 && (
+                  <span className="text-xs text-amber-500 ml-auto">{mastered.length}/{Object.keys(cueAnalysis).length} mastered</span>
+                )}
+              </div>
               
               {Object.keys(cueAnalysis).length === 0 ? (
                 <p className="text-amber-400 text-sm">Practice cues to identify triggers</p>
@@ -274,12 +195,113 @@ export default function ProgressPage() {
               )}
             </div>
 
-            {/* Videos */}
-            {videoAnalyses.length > 0 && (
-              <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-                <p className="text-sm font-medium text-amber-950 mb-3">
-                  Video Analysis <span className="font-normal text-amber-500">({videoAnalyses.length})</span>
+            {/* Step 2: Sessions */}
+            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold ${
+                  mastered.length >= 2 ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
+                }`}>2</span>
+                <p className="text-sm font-medium text-amber-950">Absence Sessions</p>
+                {sessions.length > 0 && (
+                  <span className="text-xs text-amber-500 ml-auto">{sessions.length} sessions</span>
+                )}
+              </div>
+              
+              {sessions.length === 0 ? (
+                <p className="text-amber-400 text-sm">
+                  {mastered.length >= 2 
+                    ? `${dogName} is ready for absence training!` 
+                    : `Master ${2 - mastered.length} more cue${2 - mastered.length > 1 ? 's' : ''} to unlock`}
                 </p>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.slice(0, 5).map((s) => (
+                    <div key={s.id}>
+                      <button
+                        onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
+                            s.dog_response === 'great' ? 'bg-green-100' :
+                            s.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
+                          }`}>
+                            {s.dog_response === 'great' ? '😊' : s.dog_response === 'okay' ? '😐' : '😟'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-amber-950 truncate">
+                              {s.mission_title || 'Training Session'}
+                            </p>
+                            <p className="text-xs text-amber-500">
+                              {new Date(s.created_at).toLocaleDateString('en-US', { 
+                                month: 'short', day: 'numeric' 
+                              })}
+                              {s.steps_total > 0 && ` • ${s.steps_completed}/${s.steps_total} steps`}
+                            </p>
+                          </div>
+                          <span className="text-amber-400 text-xs">
+                            {expandedSession === s.id ? '▲' : '▼'}
+                          </span>
+                        </div>
+                      </button>
+                      
+                      {expandedSession === s.id && (
+                        <div className="ml-11 mt-1 p-3 bg-amber-50 rounded-lg text-sm space-y-2">
+                          <p className="text-amber-700">
+                            <span className="font-medium">Result:</span>{' '}
+                            {s.dog_response === 'great' ? '😊 Did great!' : 
+                             s.dog_response === 'okay' ? '😐 Okay with some stress' : '😟 Struggled'}
+                          </p>
+                          
+                          {s.mission_steps && s.mission_steps.length > 0 && (
+                            <div>
+                              <p className="text-amber-700 font-medium text-xs mb-1">Steps tried:</p>
+                              <ul className="text-xs text-amber-600 space-y-1">
+                                {s.mission_steps.map((step, i) => (
+                                  <li key={i} className="flex items-start gap-2">
+                                    <span className={i < s.steps_completed ? 'text-green-500' : 'text-amber-400'}>
+                                      {i < s.steps_completed ? '✓' : '○'}
+                                    </span>
+                                    <span className={i < s.steps_completed ? '' : 'opacity-60'}>
+                                      {step}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {s.notes && (
+                            <p className="text-amber-600 text-xs italic border-t border-amber-200 pt-2">
+                              "{s.notes}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {sessions.length > 5 && (
+                    <p className="text-xs text-amber-500 text-center pt-2">
+                      +{sessions.length - 5} more sessions
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Step 3: Videos */}
+            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-6 h-6 rounded-full bg-purple-500 text-white text-xs flex items-center justify-center font-bold">3</span>
+                <p className="text-sm font-medium text-amber-950">Video Analysis</p>
+                {videoAnalyses.length > 0 && (
+                  <span className="text-xs text-amber-500 ml-auto">{videoAnalyses.length} videos</span>
+                )}
+              </div>
+
+              {videoAnalyses.length === 0 ? (
+                <p className="text-amber-400 text-sm">Upload videos to track {dogName}'s behavior when alone</p>
+              ) : (
                 <div className="space-y-2">
                   {videoAnalyses.slice(0, 3).map((v) => {
                     const { level, emoji } = getVideoAnxiety(v.analysis)
@@ -330,20 +352,32 @@ export default function ProgressPage() {
                       </div>
                     )
                   })}
+                  {videoAnalyses.length > 3 && (
+                    <p className="text-xs text-amber-500 text-center pt-2">
+                      +{videoAnalyses.length - 3} more videos
+                    </p>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions - New Order: Cues → Sessions → Videos */}
             <div className="grid grid-cols-3 gap-2">
-              <Link href="/mission" className="bg-amber-600 text-white py-3 rounded-xl font-medium text-center text-sm">
-                New Session
-              </Link>
-              <Link href="/departure-practice" className="bg-amber-100 text-amber-700 py-3 rounded-xl font-medium text-center text-sm">
+              <Link href="/departure-practice" className="bg-amber-600 text-white py-3 rounded-xl font-medium text-center text-sm">
                 Practice Cues
               </Link>
+              <Link 
+                href="/mission" 
+                className={`py-3 rounded-xl font-medium text-center text-sm ${
+                  mastered.length >= 2 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                Session
+              </Link>
               <Link href="/videos" className="bg-purple-100 text-purple-700 py-3 rounded-xl font-medium text-center text-sm">
-                Upload Video
+                Video
               </Link>
             </div>
           </>
