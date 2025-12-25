@@ -88,7 +88,7 @@ export function useSelectedDog(redirectIfNone: boolean = true): UseSelectedDogRe
 
   const selectDog = useCallback((newDog: Dog) => {
     setDog(newDog)
-    localStorage.setItem('selectedDogId', String(selectedDog.id))
+    localStorage.setItem('selectedDogId', String(newDog.id))
     
     // Dispatch a custom event so other components can react
     window.dispatchEvent(new CustomEvent('selectedDogChanged', { detail: newDog }))
