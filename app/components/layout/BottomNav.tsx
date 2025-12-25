@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Target, TrendingUp, Video, Settings } from 'lucide-react';
+import { Home, TrendingUp, Settings, BookOpen } from 'lucide-react'
 
 interface NavItem {
   href: string;
@@ -12,13 +12,12 @@ interface NavItem {
   matchPaths?: string[];
 }
 
-const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Home', icon: Home, matchPaths: ['/welcome'] },
-  { href: '/departure-practice', label: 'Practice', icon: Target, matchPaths: ['/mission', '/log-session'] },
+const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/progress', label: 'Progress', icon: TrendingUp },
-  { href: '/videos', label: 'Videos', icon: Video },
+  { href: '/journal', label: 'Journal', icon: BookOpen },
   { href: '/settings', label: 'Settings', icon: Settings },
-];
+]
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -33,7 +32,7 @@ export function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-        {navItems.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const active = isActive(item);
           const Icon = item.icon;
           return (
