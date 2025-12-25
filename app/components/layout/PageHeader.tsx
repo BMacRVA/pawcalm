@@ -1,72 +1,47 @@
-'use client';
+'use client'
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
-export interface PageHeaderProps {
-  title: string;
-  subtitle?: string;
-  showBack?: boolean;
-  backHref?: string;
-  isModal?: boolean;
-  onClose?: () => void;
-  rightAction?: React.ReactNode;
+interface PageHeaderProps {
+  title: string
+  subtitle?: string
+  showBack?: boolean
+  backHref?: string
+  onBack?: () => void
 }
 
-export function PageHeader({
-  title,
-  subtitle,
-  showBack = false,
-  backHref,
-  isModal = false,
-  onClose,
-  rightAction,
-}: PageHeaderProps) {
-  const router = useRouter();
+export function PageHeader({ title, subtitle, showBack, backHref, onBack }: PageHeaderProps) {
+  const router = useRouter()
 
   const handleBack = () => {
-    if (backHref) router.push(backHref);
-    else router.back();
-  };
-
-  const handleClose = () => {
-    if (onClose) onClose();
-    else router.back();
-  };
+    if (onBack) {
+      onBack()
+    } else if (backHref) {
+      router.push(backHref)
+    } else {
+      router.back()
+    }
+  }
 
   return (
     <header className="sticky top-0 z-20 bg-[#FDFBF7] border-b border-gray-100">
-      <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
-        <div className="w-10 flex items-center">
-          {showBack && !isModal && (
-            <button
+      <div className="px-4 py-4 max-w-lg mx-auto">
+        <div className="flex items-center gap-3">
+          {showBack && (
+            <button 
               onClick={handleBack}
-              className="w-10 h-10 -ml-2 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-              aria-label="Go back"
+              className="p-2 -ml-2 hover:bg-amber-100 rounded-full transition"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5 text-gray-700" />
             </button>
           )}
-        </div>
-        <div className="flex-1 text-center">
-          <h1 className="text-lg font-semibold text-gray-900 truncate">{title}</h1>
-          {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
-        </div>
-        <div className="w-10 flex items-center justify-end">
-          {isModal ? (
-            <button
-              onClick={handleClose}
-              className="w-10 h-10 -mr-2 flex items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          ) : rightAction}
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+            {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+          </div>
         </div>
       </div>
     </header>
-  );
+  )
 }
-
-export default PageHeader;
