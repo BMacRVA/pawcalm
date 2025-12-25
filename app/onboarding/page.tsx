@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { ProgressRing } from '../components/ui/ProgressRing'
-import { ArrowLeft, Check } from 'lucide-react'
+import { ArrowLeft, Check, Sparkles } from 'lucide-react'
 
 const COMMON_TRIGGERS = [
   { id: 'keys', label: 'Picking up keys', icon: '🔑' },
@@ -34,10 +33,19 @@ const COMMON_BEHAVIORS = [
   { id: 'noteat', label: 'Won\'t eat when alone', icon: '🍽️' },
 ]
 
+const PREPARATION_MESSAGES = [
+  { emoji: '🧠', text: 'Analyzing your dog\'s triggers...' },
+  { emoji: '📋', text: 'Creating personalized cues...' },
+  { emoji: '🎯', text: 'Building your training plan...' },
+  { emoji: '✨', text: 'Almost ready!' },
+]
+
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [preparingPlan, setPreparingPlan] = useState(false)
+  const [prepMessage, setPrepMessage] = useState(0)
   
   // Step 1: Basic info
   const [dogName, setDogName] = useState('')
@@ -80,44 +88,108 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     setLoading(true)
+    setPreparingPlan(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    // Start cycling through preparation messages
+    const messageInterval = setInterval(() => {
+      setPrepMessage(prev => (prev + 1) % PREPARATION_MESSAGES.length)
+    }, 2000)
 
-    if (!user) {
-      alert('Please log in first')
-      router.push('/login')
-      return
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    const behaviorLabels = selectedBehaviors.map(id => 
-      COMMON_BEHAVIORS.find(b => b.id === id)?.label
-    ).filter(Boolean)
-    const behaviorText = [...behaviorLabels, otherBehavior].filter(Boolean).join(', ')
+      if (!user) {
+        clearInterval(messageInterval)
+        alert('Please log in first')
+        router.push('/login')
+        return
+      }
 
-    const { error } = await supabase
-      .from('dogs')
-      .insert([{
-        name: dogName,
-        breed: breed,
-        age: age,
-        baseline: parseInt(baseline) || 5,
-        behavior: behaviorText,
-        triggers: selectedTriggers,
-        behaviors: selectedBehaviors,
-        severity: severity,
-        owner_schedule: ownerSchedule,
-        leave_duration: leaveDuration,
+      const behaviorLabels = selectedBehaviors.map(id => 
+        COMMON_BEHAVIORS.find(b => b.id === id)?.label
+      ).filter(Boolean)
+      const behaviorText = [...behaviorLabels, otherBehavior].filter(Boolean).join(', ')
+
+      // Save the dog
+      const { data: dogData, error: dogError } = await supabase
+        .from('dogs')
+        .insert([{
+          name: dogName,
+          breed: breed,
+          age: age,
+          baseline: parseInt(baseline) || 5,
+          behavior: behaviorText,
+          triggers: selectedTriggers,
+          behaviors: selectedBehaviors,
+          severity: severity,
+          owner_schedule: ownerSchedule,
+          leave_duration: leaveDuration,
+          custom_triggers: customTriggers,
+          user_id: user.id,
+        }])
+        .select()
+        .single()
+
+      if (dogError) {
+        clearInterval(messageInterval)
+        console.error('Error:', dogError)
+        alert('Error saving: ' + dogError.message)
+        setLoading(false)
+        setPreparingPlan(false)
+        return
+      }
+
+      // Set this as the selected dog
+      localStorage.setItem('selectedDogId', String(dogData.id))
+
+      // Now generate cues for the new dog
+      const triggerLabels = selectedTriggers.map(id => 
+        COMMON_TRIGGERS.find(t => t.id === id)?.label
+      ).filter(Boolean)
+
+      const dogForCues = {
+        ...dogData,
+        triggers: triggerLabels,
         custom_triggers: customTriggers,
-        user_id: user.id,
-      }])
+        behaviors: behaviorLabels,
+      }
 
-    setLoading(false)
+      const cueResponse = await fetch('/api/generate-cues-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dog: dogForCues }),
+      })
 
-    if (error) {
-      console.error('Error:', error)
-      alert('Error saving: ' + error.message)
-    } else {
+      if (cueResponse.ok) {
+        const cueData = await cueResponse.json()
+        
+        // Save cues to database
+        if (cueData.cues && cueData.cues.length > 0) {
+          const cuesToInsert = cueData.cues.map((cue: any) => ({
+            dog_id: dogData.id,
+            name: cue.name,
+            icon: cue.icon,
+            instructions: cue.instructions,
+            success_looks_like: cue.success_looks_like,
+            if_struggling: cue.if_struggling,
+            priority: cue.priority,
+            reason: cue.reason,
+            is_ai_generated: true,
+            is_custom: false,
+          }))
+
+          await supabase.from('custom_cues').insert(cuesToInsert)
+        }
+      }
+
+      clearInterval(messageInterval)
       router.push('/welcome')
+      
+    } catch (error) {
+      clearInterval(messageInterval)
+      console.error('Error:', error)
+      setLoading(false)
+      setPreparingPlan(false)
     }
   }
 
@@ -127,6 +199,47 @@ export default function OnboardingPage() {
     { title: `How does ${dogName || 'your dog'} react?`, subtitle: "What happens when you leave or prepare to leave?" },
     { title: "Almost done!", subtitle: `A few more details to personalize ${dogName || 'your dog'}'s plan` },
   ]
+
+  // Show preparation screen
+  if (preparingPlan) {
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center px-4">
+        <Card variant="elevated" padding="lg" className="max-w-md w-full text-center">
+          <div className="mb-6">
+            <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Sparkles className="w-10 h-10 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              Creating {dogName}&apos;s Plan
+            </h1>
+            <p className="text-gray-600">
+              Our AI is building a personalized training program
+            </p>
+          </div>
+
+          <div className="bg-amber-50 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-center gap-3">
+              <span className="text-2xl">{PREPARATION_MESSAGES[prepMessage].emoji}</span>
+              <p className="text-amber-800 font-medium">
+                {PREPARATION_MESSAGES[prepMessage].text}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-center gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  i === prepMessage ? 'bg-amber-500 w-4' : 'bg-amber-200'
+                }`}
+              />
+            ))}
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
