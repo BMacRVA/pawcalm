@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronDown,
   Check,
-  Plus
+  Plus,
+  X
 } from 'lucide-react'
 import { supabase } from '../supabase'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
@@ -21,6 +22,7 @@ import { ProgressRing } from '../components/ui/ProgressRing'
 import { ActionCard } from '../components/dashboard/ActionCard'
 import { StatCard, StatCardRow } from '../components/dashboard/StatCard'
 import { Card } from '../components/ui/Card'
+import { getOwnerSupportMessage, type OwnerState, type SupportMessage } from '../lib/ownerSupport'
 
 interface Dog {
   id: string
@@ -60,6 +62,8 @@ export default function Dashboard() {
   const [trainingState, setTrainingState] = useState<TrainingState>('new_user')
   const [loading, setLoading] = useState(true)
   const [showDogSelector, setShowDogSelector] = useState(false)
+  const [supportMessage, setSupportMessage] = useState<SupportMessage | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDashboardData()
@@ -72,8 +76,9 @@ export default function Dashboard() {
         router.push('/login')
         return
       }
+      
+      setUserId(user.id)
 
-      // Fetch all dogs for this user
       const { data: dogsData } = await supabase
         .from('dogs')
         .select('*')
@@ -87,15 +92,14 @@ export default function Dashboard() {
 
       setDogs(dogsData)
 
-      // Check localStorage for previously selected dog
       const savedDogId = localStorage.getItem('selectedDogId')
-      const selectedDog = dogsData.find(d => d.id === savedDogId) || dogsData[0]
+      const selectedDog = dogsData.find(d => String(d.id) === savedDogId) || dogsData[0]
       
       setDog(selectedDog)
       localStorage.setItem('selectedDogId', String(selectedDog.id))
 
-      // Fetch data for selected dog
       await fetchDogData(selectedDog)
+      await fetchOwnerSupport(String(selectedDog.id), user.id, selectedDog.name)
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -131,16 +135,31 @@ export default function Dashboard() {
     setTrainingState(state)
   }
 
-function selectDog(selectedDog: Dog) {
-  // Update localStorage FIRST, synchronously
-  localStorage.setItem('selectedDogId', String(selectedDog.id))
-  
-  // Then update local state
-  setDog(selectedDog)
-  setShowDogSelector(false)
-  setLoading(true)
-  fetchDogData(selectedDog).then(() => setLoading(false))
-}
+  async function fetchOwnerSupport(dogId: string, oderId: string, dogName: string) {
+    try {
+      const res = await fetch(`/api/owner-state?dogId=${dogId}&userId=${oderId}`)
+      if (res.ok) {
+        const state: OwnerState = await res.json()
+        const message = getOwnerSupportMessage(state, dogName)
+        setSupportMessage(message)
+      }
+    } catch (error) {
+      console.error('Error fetching owner support:', error)
+    }
+  }
+
+  function selectDog(selectedDog: Dog) {
+    setDog(selectedDog)
+    localStorage.setItem('selectedDogId', String(selectedDog.id))
+    setShowDogSelector(false)
+    setLoading(true)
+    setSupportMessage(null)
+    
+    Promise.all([
+      fetchDogData(selectedDog),
+      userId ? fetchOwnerSupport(String(selectedDog.id), userId, selectedDog.name) : Promise.resolve()
+    ]).then(() => setLoading(false))
+  }
 
   function calculateCueMastery(cues: any[], practices: any[]): CueMastery {
     const cueResponses: Record<string, { calm: number; total: number }> = {}
@@ -181,12 +200,7 @@ function selectDog(selectedDog: Dog) {
 
   function calculateSessionStats(sessions: any[]): SessionStats {
     if (sessions.length === 0) {
-      return {
-        totalSessions: 0,
-        streak: 0,
-        longestCalm: 0,
-        lastSessionResponse: null,
-      }
+      return { totalSessions: 0, streak: 0, longestCalm: 0, lastSessionResponse: null }
     }
 
     let streak = 0
@@ -225,22 +239,10 @@ function selectDog(selectedDog: Dog) {
   }
 
   function determineTrainingState(cues: CueMastery, stats: SessionStats): TrainingState {
-    if (stats.lastSessionResponse === 'struggled') {
-      return 'struggled_recently'
-    }
-
-    if (cues.masteredCues === 3 && stats.totalSessions < 2) {
-      return 'celebration'
-    }
-
-    if (cues.calmResponses === 0) {
-      return 'new_user'
-    }
-
-    if (cues.masteredCues >= 3) {
-      return stats.totalSessions > 0 ? 'doing_absences' : 'ready_for_absences'
-    }
-
+    if (stats.lastSessionResponse === 'struggled') return 'struggled_recently'
+    if (cues.masteredCues === 3 && stats.totalSessions < 2) return 'celebration'
+    if (cues.calmResponses === 0) return 'new_user'
+    if (cues.masteredCues >= 3) return stats.totalSessions > 0 ? 'doing_absences' : 'ready_for_absences'
     return 'practicing_cues'
   }
 
@@ -308,21 +310,14 @@ function selectDog(selectedDog: Dog) {
         badge: "Celebration!",
       },
     }
-
     return configs[trainingState]
   }
 
   function calculateOverallProgress(): number {
     if (!cueMastery || !sessionStats) return 0
-
     const cueMasteryProgress = Math.min((cueMastery.masteredCues / 3) * 33, 33)
-    
-    if (cueMastery.masteredCues < 3) {
-      return cueMasteryProgress
-    }
-
+    if (cueMastery.masteredCues < 3) return cueMasteryProgress
     const absenceProgress = Math.min((sessionStats.longestCalm / 30) * 67, 67)
-    
     return 33 + absenceProgress
   }
 
@@ -342,19 +337,13 @@ function selectDog(selectedDog: Dog) {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
-      {/* Header */}
       <header className="px-4 pt-6 pb-4">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-gray-500">
-              {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric'
-              })}
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
             
-            {/* Dog Selector */}
             {dogs.length > 0 && (
               <div className="relative">
                 <button
@@ -368,13 +357,7 @@ function selectDog(selectedDog: Dog) {
 
                 {showDogSelector && (
                   <>
-                    {/* Backdrop */}
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowDogSelector(false)} 
-                    />
-                    
-                    {/* Dropdown */}
+                    <div className="fixed inset-0 z-40" onClick={() => setShowDogSelector(false)} />
                     <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden">
                       <div className="p-2">
                         <p className="text-xs font-medium text-gray-500 uppercase px-3 py-2">Your Dogs</p>
@@ -383,9 +366,7 @@ function selectDog(selectedDog: Dog) {
                             key={d.id}
                             onClick={() => selectDog(d)}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${
-                              dog?.id === d.id 
-                                ? 'bg-amber-50 text-amber-900' 
-                                : 'hover:bg-gray-50 text-gray-700'
+                              dog?.id === d.id ? 'bg-amber-50 text-amber-900' : 'hover:bg-gray-50 text-gray-700'
                             }`}
                           >
                             <span className="text-xl">🐕</span>
@@ -393,19 +374,13 @@ function selectDog(selectedDog: Dog) {
                               <p className="font-medium">{d.name}</p>
                               <p className="text-xs text-gray-500">{d.breed}</p>
                             </div>
-                            {dog?.id === d.id && (
-                              <Check className="w-4 h-4 text-amber-600" />
-                            )}
+                            {dog?.id === d.id && <Check className="w-4 h-4 text-amber-600" />}
                           </button>
                         ))}
                       </div>
-                      
                       <div className="border-t border-gray-100 p-2">
                         <button
-                          onClick={() => {
-                            setShowDogSelector(false)
-                            router.push('/onboarding')
-                          }}
+                          onClick={() => { setShowDogSelector(false); router.push('/onboarding') }}
                           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 transition"
                         >
                           <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
@@ -426,47 +401,82 @@ function selectDog(selectedDog: Dog) {
         </div>
       </header>
 
-      {/* Main content */}
       <main className="px-4 pb-4">
         <div className="max-w-lg mx-auto space-y-6">
           
-          {/* Progress Ring + Primary Action */}
+          {/* Owner Support Message */}
+          {supportMessage && (
+            <Card 
+              variant="elevated" 
+              padding="md" 
+              className={
+                supportMessage.type === 'celebration' ? 'bg-green-50 border-green-200' :
+                supportMessage.type === 'tough_day' ? 'bg-blue-50 border-blue-200' :
+                supportMessage.type === 'welcome_back' ? 'bg-amber-50 border-amber-200' :
+                supportMessage.type === 'encouragement' ? 'bg-purple-50 border-purple-200' :
+                'bg-gray-50'
+              }
+            >
+              <div className="flex gap-3">
+                <span className="text-2xl flex-shrink-0">{supportMessage.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-semibold ${
+                    supportMessage.type === 'celebration' ? 'text-green-800' :
+                    supportMessage.type === 'tough_day' ? 'text-blue-800' :
+                    supportMessage.type === 'welcome_back' ? 'text-amber-800' :
+                    supportMessage.type === 'encouragement' ? 'text-purple-800' :
+                    'text-gray-800'
+                  }`}>
+                    {supportMessage.title}
+                  </h3>
+                  <p className={`text-sm mt-1 ${
+                    supportMessage.type === 'celebration' ? 'text-green-700' :
+                    supportMessage.type === 'tough_day' ? 'text-blue-700' :
+                    supportMessage.type === 'welcome_back' ? 'text-amber-700' :
+                    supportMessage.type === 'encouragement' ? 'text-purple-700' :
+                    'text-gray-700'
+                  }`}>
+                    {supportMessage.message}
+                  </p>
+                  {supportMessage.action && (
+                    <button
+                      onClick={() => router.push(supportMessage.action!.href)}
+                      className={`mt-2 text-sm font-semibold ${
+                        supportMessage.type === 'celebration' ? 'text-green-600' :
+                        supportMessage.type === 'tough_day' ? 'text-blue-600' :
+                        supportMessage.type === 'welcome_back' ? 'text-amber-600' :
+                        'text-purple-600'
+                      }`}
+                    >
+                      {supportMessage.action.label} →
+                    </button>
+                  )}
+                </div>
+                <button onClick={() => setSupportMessage(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </Card>
+          )}
+
+          {/* Progress Ring */}
           <div className="flex gap-4 items-start">
             <div className="flex-shrink-0">
-              <ProgressRing
-                progress={overallProgress}
-                size={100}
-                strokeWidth={8}
-                color="primary"
-                label="Journey"
-              />
+              <ProgressRing progress={overallProgress} size={100} strokeWidth={8} color="primary" label="Journey" />
             </div>
-
             <div className="flex-1 pt-2">
               <p className="text-sm text-gray-600 leading-relaxed">
-                {trainingState === 'new_user' && (
-                  <>You&apos;re at the beginning of your journey. Let&apos;s help {dog?.name} feel calm when you leave.</>
-                )}
-                {trainingState === 'practicing_cues' && (
-                  <>Great progress on departure cues! Keep building {dog?.name}&apos;s confidence.</>
-                )}
-                {trainingState === 'ready_for_absences' && (
-                  <>You&apos;ve done the prep work! {dog?.name} is ready for the real thing.</>
-                )}
-                {trainingState === 'doing_absences' && (
-                  <>You&apos;re in absence training now. Consistency is key!</>
-                )}
-                {trainingState === 'struggled_recently' && (
-                  <>Setbacks are normal. Today we&apos;ll rebuild confidence together.</>
-                )}
-                {trainingState === 'celebration' && (
-                  <>What an achievement! You&apos;ve unlocked the next phase.</>
-                )}
+                {trainingState === 'new_user' && <>You&apos;re at the beginning of your journey. Let&apos;s help {dog?.name} feel calm when you leave.</>}
+                {trainingState === 'practicing_cues' && <>Great progress on departure cues! Keep building {dog?.name}&apos;s confidence.</>}
+                {trainingState === 'ready_for_absences' && <>You&apos;ve done the prep work! {dog?.name} is ready for the real thing.</>}
+                {trainingState === 'doing_absences' && <>You&apos;re in absence training now. Consistency is key!</>}
+                {trainingState === 'struggled_recently' && <>Setbacks are normal. Today we&apos;ll rebuild confidence together.</>}
+                {trainingState === 'celebration' && <>What an achievement! You&apos;ve unlocked the next phase.</>}
               </p>
             </div>
           </div>
 
-          {/* Primary Action Card */}
+          {/* Primary Action */}
           <ActionCard
             icon={actionConfig.icon}
             title={actionConfig.title}
@@ -477,40 +487,18 @@ function selectDog(selectedDog: Dog) {
             badge={actionConfig.badge}
           />
 
-          {/* Stats Row */}
+          {/* Stats */}
           <StatCardRow>
-            <StatCard
-              icon={<Flame className="w-4 h-4" />}
-              label="Streak"
-              value={`${sessionStats?.streak || 0} day${sessionStats?.streak !== 1 ? 's' : ''}`}
-              color={sessionStats?.streak && sessionStats.streak >= 3 ? 'success' : 'default'}
-            />
-            <StatCard
-              icon={<CheckCircle2 className="w-4 h-4" />}
-              label="Cues"
-              value={`${cueMastery?.masteredCues || 0}/${Math.max(cueMastery?.totalCues || 0, 3)}`}
-              color={cueMastery?.masteredCues && cueMastery.masteredCues >= 3 ? 'success' : 'default'}
-            />
-            <StatCard
-              icon={<Timer className="w-4 h-4" />}
-              label="Best"
-              value={sessionStats?.longestCalm ? `${sessionStats.longestCalm}m` : '—'}
-              color="default"
-            />
+            <StatCard icon={<Flame className="w-4 h-4" />} label="Streak" value={`${sessionStats?.streak || 0} day${sessionStats?.streak !== 1 ? 's' : ''}`} color={sessionStats?.streak && sessionStats.streak >= 3 ? 'success' : 'default'} />
+            <StatCard icon={<CheckCircle2 className="w-4 h-4" />} label="Cues" value={`${cueMastery?.masteredCues || 0}/${Math.max(cueMastery?.totalCues || 0, 3)}`} color={cueMastery?.masteredCues && cueMastery.masteredCues >= 3 ? 'success' : 'default'} />
+            <StatCard icon={<Timer className="w-4 h-4" />} label="Best" value={sessionStats?.longestCalm ? `${sessionStats.longestCalm}m` : '—'} color="default" />
           </StatCardRow>
 
           {/* Secondary Actions */}
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-              More options
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">More options</h2>
             
-            <Card 
-              variant="outlined" 
-              padding="md" 
-              pressable 
-              onClick={() => router.push('/departure-practice')}
-            >
+            <Card variant="outlined" padding="md" pressable onClick={() => router.push('/departure-practice')}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
                   <Key className="w-5 h-5 text-amber-600" />
@@ -523,12 +511,7 @@ function selectDog(selectedDog: Dog) {
               </div>
             </Card>
 
-            <Card 
-              variant="outlined" 
-              padding="md" 
-              pressable 
-              onClick={() => router.push('/videos')}
-            >
+            <Card variant="outlined" padding="md" pressable onClick={() => router.push('/videos')}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                   <Video className="w-5 h-5 text-blue-600" />
@@ -545,10 +528,7 @@ function selectDog(selectedDog: Dog) {
         </div>
       </main>
 
-      {/* Bottom Navigation Spacer */}
       <BottomNavSpacer />
-
-      {/* Bottom Navigation */}
       <BottomNav />
     </div>
   )

@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { CueCard, CueList } from '../components/domain/CueCard'
 import { Plus, Sparkles, RotateCcw, Check } from 'lucide-react'
+import { getPostPracticeMessage } from '../lib/ownerSupport'
 
 type Cue = {
   id: string
@@ -19,6 +20,26 @@ type Cue = {
 }
 
 type PracticeResponse = 'calm' | 'slight_reaction' | 'anxious'
+
+function getTimeOfDay(): string {
+  const hour = new Date().getHours()
+  if (hour < 6) return 'night'
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
+  if (hour < 21) return 'evening'
+  return 'night'
+}
+
+function getCueType(cueName: string): string {
+  const name = cueName.toLowerCase()
+  if (name.includes('key')) return 'keys'
+  if (name.includes('shoe')) return 'shoes'
+  if (name.includes('door')) return 'door'
+  if (name.includes('jacket') || name.includes('coat')) return 'jacket'
+  if (name.includes('bag') || name.includes('purse')) return 'bag'
+  if (name.includes('coffee')) return 'routine'
+  return 'other'
+}
 
 export default function DeparturePracticePage() {
   const router = useRouter()
@@ -33,6 +54,10 @@ export default function DeparturePracticePage() {
   const [showAddCue, setShowAddCue] = useState(false)
   const [newCueName, setNewCueName] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [sessionSequence, setSessionSequence] = useState(0)
+  const [consecutiveCalm, setConsecutiveCalm] = useState(0)
+  const [consecutiveAnxious, setConsecutiveAnxious] = useState(0)
+  const [supportMessage, setSupportMessage] = useState('')
 
   const loadCues = useCallback(async () => {
     if (!dog) return
@@ -81,7 +106,6 @@ export default function DeparturePracticePage() {
     }
   }, [dog, loadCues])
 
-  // Handle deep link from Progress page
   useEffect(() => {
     if (cues.length > 0) {
       const specificCueId = localStorage.getItem('practiceSpecificCue')
@@ -108,10 +132,7 @@ export default function DeparturePracticePage() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log('API returned:', data)
-        console.log('Dog ID:', dog.id, typeof dog.id)
         
-        // Save cues to database
         if (data.cues && data.cues.length > 0) {
           const cuesToInsert = data.cues.map((cue: any) => ({
             dog_id: dog.id,
@@ -126,18 +147,7 @@ export default function DeparturePracticePage() {
             is_custom: false,
           }))
 
-          console.log('Inserting cues:', cuesToInsert)
-
-          const { data: insertedData, error } = await supabase
-            .from('custom_cues')
-            .insert(cuesToInsert)
-            .select()
-
-          if (error) {
-            console.error('Error saving cues:', JSON.stringify(error, null, 2))
-          } else {
-            console.log('Inserted successfully:', insertedData)
-          }
+          await supabase.from('custom_cues').insert(cuesToInsert)
         }
         
         await loadCues()
@@ -152,20 +162,16 @@ export default function DeparturePracticePage() {
   const addCustomCue = async () => {
     if (!dog || !newCueName.trim()) return
 
-    const { error } = await supabase
-      .from('custom_cues')
-      .insert({
-        dog_id: dog.id,
-        name: newCueName.trim(),
-        is_custom: true,
-        is_ai_generated: false,
-      })
+    await supabase.from('custom_cues').insert({
+      dog_id: dog.id,
+      name: newCueName.trim(),
+      is_custom: true,
+      is_ai_generated: false,
+    })
 
-    if (!error) {
-      setNewCueName('')
-      setShowAddCue(false)
-      loadCues()
-    }
+    setNewCueName('')
+    setShowAddCue(false)
+    loadCues()
   }
 
   const startPractice = (cue: Cue) => {
@@ -173,6 +179,7 @@ export default function DeparturePracticePage() {
     setPracticeMode(true)
     setShowResult(false)
     setLastResponse(null)
+    setSupportMessage('')
   }
 
   const logResponse = async (response: PracticeResponse) => {
@@ -180,7 +187,42 @@ export default function DeparturePracticePage() {
 
     setLastResponse(response)
     setShowResult(true)
+    setSessionSequence(prev => prev + 1)
 
+    // Update consecutive counters
+    if (response === 'calm') {
+      setConsecutiveCalm(prev => prev + 1)
+      setConsecutiveAnxious(0)
+    } else if (response === 'anxious') {
+      setConsecutiveAnxious(prev => prev + 1)
+      setConsecutiveCalm(0)
+    } else {
+      setConsecutiveCalm(0)
+      setConsecutiveAnxious(0)
+    }
+
+    // Generate support message
+    const message = getPostPracticeMessage(
+      response,
+      response === 'calm' ? consecutiveCalm + 1 : 0,
+      response === 'anxious' ? consecutiveAnxious + 1 : 0,
+      dog.name
+    )
+    setSupportMessage(message)
+
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+
+    // Count practices today
+    const { count: practicesToday } = await supabase
+      .from('cue_practices')
+      .select('*', { count: 'exact', head: true })
+      .eq('dog_id', dog.id)
+      .gte('created_at', `${today}T00:00:00`)
+
+    const practiceNumber = selectedCue.totalCount + 1
+
+    // Insert enriched practice data
     await supabase.from('cue_practices').insert({
       dog_id: dog.id,
       cues: [{
@@ -188,6 +230,44 @@ export default function DeparturePracticePage() {
         cue_name: selectedCue.name,
         response: response,
       }],
+      practice_number: practiceNumber,
+      time_of_day: getTimeOfDay(),
+      day_of_week: now.getDay(),
+      session_sequence: sessionSequence,
+      practices_today: (practicesToday || 0) + 1,
+    })
+
+    // Update cue statistics
+    const newCalmCount = selectedCue.calmCount + (response === 'calm' ? 1 : 0)
+    const newTotalCount = selectedCue.totalCount + 1
+    const calmRate = newTotalCount > 0 ? newCalmCount / newTotalCount : 0
+    const justMastered = newCalmCount >= 5 && calmRate >= 0.7
+
+    await supabase
+      .from('custom_cues')
+      .update({
+        total_practices: newTotalCount,
+        calm_count: newCalmCount,
+        last_practiced_at: now.toISOString(),
+        ...(justMastered ? { mastered_at: now.toISOString() } : {}),
+      })
+      .eq('id', selectedCue.id)
+
+    // Log to outcome_patterns for ML
+    await supabase.from('outcome_patterns').insert({
+      dog_breed: dog.breed,
+      dog_age: dog.age,
+      severity: dog.severity,
+      baseline: parseInt(String(dog.baseline)) || 5,
+      cue_name: selectedCue.name,
+      cue_type: getCueType(selectedCue.name),
+      practice_number: practiceNumber,
+      time_of_day: getTimeOfDay(),
+      day_of_week: now.getDay(),
+      response: response,
+      was_successful: response === 'calm',
+      dog_id: dog.id,
+      cue_id: selectedCue.id,
     })
 
     loadCues()
@@ -198,6 +278,9 @@ export default function DeparturePracticePage() {
     setSelectedCue(null)
     setShowResult(false)
     setLastResponse(null)
+    setSessionSequence(0)
+    setConsecutiveCalm(0)
+    setConsecutiveAnxious(0)
     router.push('/dashboard')
   }
 
@@ -223,6 +306,12 @@ export default function DeparturePracticePage() {
 
   // Practice Mode - Show Result
   if (practiceMode && showResult && selectedCue) {
+    const newCalmCount = selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0)
+    const newTotalCount = selectedCue.totalCount + 1
+    const calmRate = newTotalCount > 0 ? newCalmCount / newTotalCount : 0
+    const justMastered = newCalmCount >= 5 && calmRate >= 0.7 && selectedCue.calmCount < 5
+    const cuesRemaining = 5 - newCalmCount
+
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
         <PageHeader title="Practice Complete" />
@@ -231,26 +320,41 @@ export default function DeparturePracticePage() {
           <div className="max-w-lg mx-auto">
             <Card variant="elevated" padding="lg" className="text-center">
               <span className="text-6xl mb-4 block">
-                {lastResponse === 'calm' ? '🎉' : lastResponse === 'slight_reaction' ? '👍' : '💪'}
+                {justMastered ? '🏆' : lastResponse === 'calm' ? '🎉' : lastResponse === 'slight_reaction' ? '👍' : '💪'}
               </span>
               <h2 className="text-xl font-bold text-gray-900 mb-2">
-                {lastResponse === 'calm' && 'Amazing!'}
-                {lastResponse === 'slight_reaction' && 'Good effort!'}
-                {lastResponse === 'anxious' && 'Keep going!'}
+                {justMastered && `${selectedCue.name} Mastered!`}
+                {!justMastered && lastResponse === 'calm' && 'Amazing!'}
+                {!justMastered && lastResponse === 'slight_reaction' && 'Good effort!'}
+                {!justMastered && lastResponse === 'anxious' && 'Keep going!'}
               </h2>
+              
               <p className="text-gray-600 mb-6">
-                {lastResponse === 'calm' && `${dog?.name} stayed calm! That's great progress.`}
-                {lastResponse === 'slight_reaction' && `${dog?.name} had a small reaction. That's normal - keep practicing!`}
-                {lastResponse === 'anxious' && `${dog?.name} was anxious this time. We'll get there with more practice.`}
+                {supportMessage}
               </p>
 
-              {/* Progress update */}
               <Card variant="filled" padding="md" className="mb-6 text-left">
                 <p className="text-amber-800 text-sm">
-                  <strong>📊 {selectedCue.name}:</strong> {selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0)} calm responses out of {selectedCue.totalCount + 1} total
-                  {selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0) >= 5 && ' — Almost mastered!'}
+                  <strong>📊 {selectedCue.name}:</strong> {newCalmCount} calm / {newTotalCount} total ({Math.round(calmRate * 100)}%)
                 </p>
+                {newCalmCount >= 5 && calmRate >= 0.7 ? (
+                  <p className="text-green-700 text-sm mt-1">✓ Mastered!</p>
+                ) : (
+                  <p className="text-amber-700 text-sm mt-1">
+                    {cuesRemaining > 0 
+                      ? `${cuesRemaining} more calm response${cuesRemaining !== 1 ? 's' : ''} needed`
+                      : 'Need 70%+ calm rate for mastery'}
+                  </p>
+                )}
               </Card>
+
+              {consecutiveAnxious >= 2 && (
+                <Card variant="outlined" padding="md" className="mb-6 bg-blue-50 border-blue-200">
+                  <p className="text-blue-800 text-sm">
+                    <strong>💡 Suggestion:</strong> {dog?.name} might need a break, or try a cue that&apos;s been going well.
+                  </p>
+                </Card>
+              )}
 
               <div className="space-y-3">
                 <Button onClick={practiceAnother} fullWidth>
@@ -282,7 +386,6 @@ export default function DeparturePracticePage() {
         <main className="px-4 py-6">
           <div className="max-w-lg mx-auto space-y-6">
             
-            {/* Current Cue */}
             <Card variant="elevated" padding="lg" className="text-center">
               <span className="text-5xl mb-4 block">🔑</span>
               <h2 className="text-xl font-bold text-gray-900 mb-2">{selectedCue.name}</h2>
@@ -291,7 +394,6 @@ export default function DeparturePracticePage() {
               </p>
             </Card>
 
-            {/* Instructions */}
             <Card variant="filled" padding="md" className="bg-blue-50">
               <h3 className="font-semibold text-blue-900 mb-2">📋 How to Practice</h3>
               <ol className="text-blue-800 text-sm space-y-2">
@@ -303,26 +405,24 @@ export default function DeparturePracticePage() {
               </ol>
             </Card>
 
-            {/* What to Watch For */}
             <Card variant="outlined" padding="md">
               <h3 className="font-semibold text-gray-900 mb-3">👀 What to Watch For</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="text-green-500">✓</span>
-                  <p className="text-gray-700"><strong>Calm:</strong> Relaxed body, no change in behavior, might glance but looks away</p>
+                  <p className="text-gray-700"><strong>Calm:</strong> Relaxed body, no change in behavior</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-amber-500">~</span>
-                  <p className="text-gray-700"><strong>Slight reaction:</strong> Ears perk up, watches you, mild interest but settles</p>
+                  <p className="text-gray-700"><strong>Slight reaction:</strong> Ears perk up, watches you, but settles</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-red-500">!</span>
-                  <p className="text-gray-700"><strong>Anxious:</strong> Gets up, follows you, whines, paces, or shows stress signals</p>
+                  <p className="text-gray-700"><strong>Anxious:</strong> Gets up, follows you, whines, paces</p>
                 </div>
               </div>
             </Card>
 
-            {/* Response Buttons */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
                 How did {dog?.name} react?
@@ -363,12 +463,10 @@ export default function DeparturePracticePage() {
               </div>
             </div>
 
-            {/* Tip */}
             <Card variant="filled" padding="md">
               <p className="text-amber-800 text-sm">
                 <strong>💡 Tip:</strong> If {dog?.name} is anxious, that&apos;s valuable information! 
-                It means we need to practice this cue more. Try doing it more casually next time, 
-                or pair it with treats.
+                Try doing it more casually next time, or pair it with treats.
               </p>
             </Card>
 
@@ -394,7 +492,6 @@ export default function DeparturePracticePage() {
       <main className="px-4 py-6">
         <div className="max-w-lg mx-auto space-y-6">
 
-          {/* Explanation Card */}
           <Card variant="filled" padding="md">
             <p className="text-amber-800 text-sm">
               <strong>What are departure cues?</strong> These are actions you do before leaving (like picking up keys). 
@@ -402,7 +499,6 @@ export default function DeparturePracticePage() {
             </p>
           </Card>
 
-          {/* Cue List */}
           {cues.length > 0 ? (
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
@@ -434,7 +530,6 @@ export default function DeparturePracticePage() {
             </Card>
           )}
 
-          {/* Add Custom Cue */}
           {cues.length > 0 && (
             <>
               {showAddCue ? (
