@@ -23,11 +23,13 @@ import { ActionCard } from '../components/dashboard/ActionCard'
 import { StatCard, StatCardRow } from '../components/dashboard/StatCard'
 import { Card } from '../components/ui/Card'
 import { getOwnerSupportMessage, type OwnerState, type SupportMessage } from '../lib/ownerSupport'
+import { getTopPrediction, type Prediction, type DogProfile, type ProgressData } from '../lib/predictions'
 
 interface Dog {
   id: string
   name: string
   breed: string
+  age: string
   baseline: number
   severity: string
 }
@@ -63,6 +65,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showDogSelector, setShowDogSelector] = useState(false)
   const [supportMessage, setSupportMessage] = useState<SupportMessage | null>(null)
+  const [prediction, setPrediction] = useState<Prediction | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -116,8 +119,9 @@ export default function Dashboard() {
 
     const { data: practiceData } = await supabase
       .from('cue_practices')
-      .select('cues')
+      .select('cues, created_at')
       .eq('dog_id', selectedDog.id)
+      .order('created_at', { ascending: true })
 
     const cueStats = calculateCueMastery(cueData || [], practiceData || [])
     setCueMastery(cueStats)
@@ -133,6 +137,40 @@ export default function Dashboard() {
 
     const state = determineTrainingState(cueStats, stats)
     setTrainingState(state)
+
+    // Calculate predictions
+    const firstPractice = practiceData?.[0]?.created_at
+    const daysSinceStart = firstPractice 
+      ? Math.floor((Date.now() - new Date(firstPractice).getTime()) / (1000 * 60 * 60 * 24))
+      : 0
+
+    const profile: DogProfile = {
+      breed: selectedDog.breed,
+      age: selectedDog.age || 'adult',
+      severity: selectedDog.severity || 'moderate',
+      baseline: selectedDog.baseline || 5,
+    }
+
+    // Count total practices properly
+    let totalPracticeCount = 0
+    practiceData?.forEach(p => {
+      const cues = p.cues as any[]
+      totalPracticeCount += cues?.length || 0
+    })
+
+    const progressData: ProgressData = {
+      totalPractices: totalPracticeCount,
+      calmResponses: cueStats.calmResponses,
+      cuesMastered: cueStats.masteredCues,
+      totalCues: cueStats.totalCues,
+      daysSinceStart,
+      currentStreak: stats.streak,
+      sessionsCompleted: stats.totalSessions,
+      longestAbsence: stats.longestCalm,
+    }
+
+    const topPrediction = getTopPrediction(profile, progressData)
+    setPrediction(topPrediction)
   }
 
   async function fetchOwnerSupport(dogId: string, oderId: string, dogName: string) {
@@ -154,6 +192,7 @@ export default function Dashboard() {
     setShowDogSelector(false)
     setLoading(true)
     setSupportMessage(null)
+    setPrediction(null)
     
     Promise.all([
       fetchDogData(selectedDog),
@@ -453,6 +492,50 @@ export default function Dashboard() {
                   )}
                 </div>
                 <button onClick={() => setSupportMessage(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </Card>
+          )}
+
+          {/* Prediction Card */}
+          {prediction && !supportMessage && (
+            <Card 
+              variant="elevated" 
+              padding="md" 
+              className={
+                prediction.type === 'warning' ? 'bg-orange-50 border-orange-200' :
+                prediction.type === 'milestone' ? 'bg-purple-50 border-purple-200' :
+                prediction.type === 'comparison' ? 'bg-blue-50 border-blue-200' :
+                'bg-green-50 border-green-200'
+              }
+            >
+              <div className="flex gap-3">
+                <span className="text-2xl flex-shrink-0">{prediction.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-semibold ${
+                      prediction.type === 'warning' ? 'text-orange-800' :
+                      prediction.type === 'milestone' ? 'text-purple-800' :
+                      prediction.type === 'comparison' ? 'text-blue-800' :
+                      'text-green-800'
+                    }`}>
+                      {prediction.title}
+                    </h3>
+                    {prediction.confidence === 'low' && (
+                      <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Early estimate</span>
+                    )}
+                  </div>
+                  <p className={`text-sm mt-1 ${
+                    prediction.type === 'warning' ? 'text-orange-700' :
+                    prediction.type === 'milestone' ? 'text-purple-700' :
+                    prediction.type === 'comparison' ? 'text-blue-700' :
+                    'text-green-700'
+                  }`}>
+                    {prediction.message}
+                  </p>
+                </div>
+                <button onClick={() => setPrediction(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
                   <X className="w-4 h-4" />
                 </button>
               </div>
