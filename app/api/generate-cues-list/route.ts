@@ -46,12 +46,20 @@ Generate exactly 8 cue exercises that are MOST RELEVANT to this specific dog. In
 
 Each cue should be a small, repeatable action the owner does WITHOUT actually leaving.
 
+CRITICAL - CUE NAMING RULES:
+- Names MUST be descriptive action phrases like "Pick up my keys", "Put on my shoes", "Touch the door handle"
+- Names should describe WHAT THE OWNER DOES, not just the object
+- Use first person ("my keys" not "keys")
+- DO NOT use generic names like "Keys Cue" or "Door Cue"
+- Good examples: "Pick up my keys", "Put on my jacket", "Grab my work bag", "Open the front door slightly"
+- Bad examples: "Keys Cue", "Door Cue", "Jacket", "Keys"
+
 Respond with this exact JSON format:
 {
   "cues": [
     {
       "id": "unique-id-no-spaces",
-      "name": "Short name for the cue",
+      "name": "Descriptive action phrase (e.g., 'Pick up my keys')",
       "icon": "single emoji that represents this action",
       "instructions": "Clear 2-3 sentence instructions. Include 'Repeat 10 times.' Be specific about what to do. Tell them to act casual and not make eye contact with the dog.",
       "success_looks_like": "What calm behavior looks like for this specific trigger. 1-2 sentences.",
@@ -68,6 +76,7 @@ IMPORTANT:
 - Use varied, appropriate emojis for each cue
 - Make instructions specific and actionable
 - Priority should be "high" for their specific triggers, "medium" for common cues, "low" for nice-to-haves
+- REMEMBER: Names must be descriptive actions like "Pick up my keys", NOT "Keys Cue"
 
 Only respond with valid JSON.`
 
@@ -94,7 +103,7 @@ Only respond with valid JSON.`
       cues: [
         {
           id: 'keys',
-          name: 'Pick up keys',
+          name: 'Pick up my keys',
           icon: '🔑',
           instructions: 'Pick up your keys, hold for 2 seconds, then put them down. Don\'t look at your dog. Repeat 10 times.',
           success_looks_like: 'Your dog stays relaxed — no pacing, whining, or following.',
@@ -104,7 +113,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'shoes',
-          name: 'Put on shoes',
+          name: 'Put on my shoes',
           icon: '👟',
           instructions: 'Put on your shoes, walk around briefly, then take them off. Act casual. Repeat 10 times.',
           success_looks_like: 'Your dog notices but doesn\'t get up or show anxiety.',
@@ -114,7 +123,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'jacket',
-          name: 'Put on jacket',
+          name: 'Put on my jacket',
           icon: '🧥',
           instructions: 'Put on your jacket, wait 5 seconds, then take it off. Repeat 10 times.',
           success_looks_like: 'Your dog stays settled and doesn\'t get anxious.',
@@ -124,7 +133,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'bag',
-          name: 'Pick up bag',
+          name: 'Grab my bag',
           icon: '👜',
           instructions: 'Pick up your bag, carry it for a moment, then put it down. Repeat 10 times.',
           success_looks_like: 'Your dog remains calm and doesn\'t follow you.',
@@ -134,7 +143,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'door-touch',
-          name: 'Touch door handle',
+          name: 'Touch the door handle',
           icon: '🚪',
           instructions: 'Walk to the door, touch the handle, then walk away. Don\'t open it. Repeat 10 times.',
           success_looks_like: 'Your dog notices but doesn\'t rush to the door.',
@@ -144,7 +153,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'door-open',
-          name: 'Open door slightly',
+          name: 'Open the door slightly',
           icon: '🚪',
           instructions: 'Open the door a few inches, pause, then close it. Don\'t step out. Repeat 10 times.',
           success_looks_like: 'Your dog stays calm and doesn\'t try to block the door.',
@@ -154,7 +163,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'phone-door',
-          name: 'Check phone by door',
+          name: 'Check my phone by the door',
           icon: '📱',
           instructions: 'Walk to the door while looking at your phone, pause, then walk away. Repeat 10 times.',
           success_looks_like: 'Your dog remains relaxed and doesn\'t follow.',
@@ -164,7 +173,7 @@ Only respond with valid JSON.`
         },
         {
           id: 'coffee',
-          name: 'Morning routine cue',
+          name: 'Do my morning routine',
           icon: '☕',
           instructions: 'Do a quick part of your morning routine (rinse cup, check bag), then sit back down. Repeat 10 times.',
           success_looks_like: 'Your dog doesn\'t associate this with leaving.',

@@ -1,388 +1,308 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
+import { useSelectedDog } from '../hooks/useSelectedDog'
+import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Card } from '../components/ui/Card'
+import { Button } from '../components/ui/Button'
+import { SessionCard, SessionList } from '../components/progress/SessionCard'
+import { Key, Footprints, Video, ChevronRight } from 'lucide-react'
+
+type CueProgress = {
+  id: string
+  name: string
+  calmCount: number
+  totalCount: number
+  status: 'mastered' | 'working' | 'struggling'
+}
 
 type Session = {
   id: string
   created_at: string
-  dog_response: string
+  duration: number
+  target_duration: number
   mission_title: string
   mission_steps: string[]
   steps_completed: number
-  steps_total: number
+  dog_response: 'great' | 'okay' | 'struggled'
+  owner_feeling: string
   notes: string
 }
 
-type CuePractice = {
-  id: string
-  created_at: string
-  cues: { cue_id: string; cue_name: string; response: string }[]
-}
-
-type VideoAnalysis = {
-  id: string
-  created_at: string
-  analysis: string
-}
-
 export default function ProgressPage() {
-  const [dogName, setDogName] = useState('')
+  const router = useRouter()
+  const { dog, loading: dogLoading } = useSelectedDog()
+  
+  const [cueProgress, setCueProgress] = useState<CueProgress[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
-  const [cuePractices, setCuePractices] = useState<CuePractice[]>([])
-  const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>([])
   const [loading, setLoading] = useState(true)
-  const [expandedSession, setExpandedSession] = useState<string | null>(null)
-  const [expandedVideo, setExpandedVideo] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  const loadProgress = useCallback(async () => {
+    if (!dog) return
 
-  const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      window.location.href = '/login'
-      return
-    }
-
-    const { data: dog } = await supabase
-      .from('dogs')
+    // Load cue progress
+    const { data: customCues } = await supabase
+      .from('custom_cues')
       .select('id, name')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single()
+      .eq('dog_id', dog.id)
 
-    if (dog) {
-      setDogName(dog.name)
+    const { data: practices } = await supabase
+      .from('cue_practices')
+      .select('cues')
+      .eq('dog_id', dog.id)
 
-      const [sessionsRes, cuesRes, videosRes] = await Promise.all([
-        supabase.from('sessions').select('*').eq('dog_id', dog.id).order('created_at', { ascending: false }),
-        supabase.from('cue_practices').select('*').eq('dog_id', dog.id).order('created_at', { ascending: false }),
-        supabase.from('video_analyses').select('*').eq('dog_id', dog.id).eq('status', 'analyzed').order('created_at', { ascending: false })
-      ])
+    const cueStats: Record<string, { id: string; name: string; calm: number; total: number }> = {}
 
-      if (sessionsRes.data) setSessions(sessionsRes.data)
-      if (cuesRes.data) setCuePractices(cuesRes.data)
-      if (videosRes.data) setVideoAnalyses(videosRes.data)
-    }
-    setLoading(false)
-  }
+    customCues?.forEach(cue => {
+      cueStats[cue.id] = { id: cue.id, name: cue.name, calm: 0, total: 0 }
+    })
 
-  const getCueAnalysis = () => {
-    const cueHistory: Record<string, { 
-      name: string
-      total: number
-      calm: number
-      status: 'stressful' | 'working-on' | 'mastered'
-    }> = {}
-
-    const sortedPractices = [...cuePractices].reverse()
-    sortedPractices.forEach(practice => {
-      practice.cues?.forEach(cue => {
-        if (!cueHistory[cue.cue_name]) {
-          cueHistory[cue.cue_name] = { name: cue.cue_name, total: 0, calm: 0, status: 'working-on' }
+    practices?.forEach(practice => {
+      practice.cues?.forEach((c: any) => {
+        if (cueStats[c.cue_id]) {
+          cueStats[c.cue_id].total++
+          if (c.response === 'calm') {
+            cueStats[c.cue_id].calm++
+          }
         }
-        cueHistory[cue.cue_name].total++
-        if (cue.response === 'calm') cueHistory[cue.cue_name].calm++
       })
     })
 
-    Object.values(cueHistory).forEach(cue => {
-      const calmRate = cue.calm / cue.total
-      if (cue.total >= 2 && calmRate >= 0.7) cue.status = 'mastered'
-      else if (calmRate <= 0.3) cue.status = 'stressful'
+    const progress: CueProgress[] = Object.values(cueStats).map(cue => {
+      const calmRate = cue.total > 0 ? cue.calm / cue.total : 0
+      let status: 'mastered' | 'working' | 'struggling' = 'working'
+      
+      if (cue.calm >= 5 && calmRate >= 0.7) {
+        status = 'mastered'
+      } else if (calmRate < 0.3 && cue.total >= 3) {
+        status = 'struggling'
+      }
+
+      return {
+        id: cue.id,
+        name: cue.name,
+        calmCount: cue.calm,
+        totalCount: cue.total,
+        status,
+      }
     })
 
-    return cueHistory
+    setCueProgress(progress)
+
+    // Load sessions
+    const { data: sessionsData } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('dog_id', dog.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    setSessions(sessionsData || [])
+    setLoading(false)
+  }, [dog])
+
+  useEffect(() => {
+    if (dog) {
+      loadProgress()
+    }
+  }, [dog, loadProgress])
+
+  const handleCueClick = (cueId: string) => {
+    // Store the cue ID to auto-start practice
+    localStorage.setItem('practiceSpecificCue', cueId)
+    router.push('/departure-practice')
   }
 
-  const getVideoAnxiety = (analysis: string): { level: string; emoji: string } => {
-    const lower = analysis.toLowerCase()
-    if (lower.includes('none 😎')) return { level: 'Calm', emoji: '😎' }
-    if (lower.includes('mild 😊')) return { level: 'Mild', emoji: '😊' }
-    if (lower.includes('moderate 😟')) return { level: 'Moderate', emoji: '😟' }
-    return { level: 'Severe', emoji: '😰' }
-  }
+  const isLoading = dogLoading || loading
 
-  const cueAnalysis = getCueAnalysis()
-  const stressful = Object.values(cueAnalysis).filter(c => c.status === 'stressful')
-  const workingOn = Object.values(cueAnalysis).filter(c => c.status === 'working-on')
-  const mastered = Object.values(cueAnalysis).filter(c => c.status === 'mastered')
-
-  const hasData = sessions.length > 0 || Object.keys(cueAnalysis).length > 0 || videoAnalyses.length > 0
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
-        <p className="text-amber-800">Loading...</p>
+        <div className="animate-pulse flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-amber-200" />
+          <div className="h-4 w-24 bg-amber-200 rounded" />
+        </div>
       </div>
     )
   }
 
+  const masteredCues = cueProgress.filter(c => c.status === 'mastered')
+  const workingCues = cueProgress.filter(c => c.status === 'working')
+  const strugglingCues = cueProgress.filter(c => c.status === 'struggling')
+
   return (
-    <div className="min-h-screen bg-[#FDFBF7] py-6 px-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <Link href="/dashboard" className="text-amber-600 text-sm">← Back</Link>
-          <h1 className="text-xl font-bold text-amber-950">{dogName}'s Progress</h1>
-          <div className="w-12"></div>
-        </div>
+    <div className="min-h-screen bg-[#FDFBF7]">
+      <PageHeader title={`${dog?.name}'s Progress`} />
+      
+      <main className="px-4 py-6">
+        <div className="max-w-lg mx-auto space-y-6">
 
-        {!hasData ? (
-          <div className="bg-white rounded-2xl p-8 border border-amber-100 text-center">
-            <span className="text-4xl mb-3 block">🐕</span>
-            <p className="text-amber-700 mb-4">Start with cue practice to begin tracking</p>
-            <Link href="/departure-practice" className="bg-amber-600 text-white px-6 py-2 rounded-lg font-medium">
-              Practice Cues
-            </Link>
-          </div>
-        ) : (
-          <>
-            {/* Step 1: Cues */}
-            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center font-bold">1</span>
-                <p className="text-sm font-medium text-amber-950">Departure Cues</p>
-                {Object.keys(cueAnalysis).length > 0 && (
-                  <span className="text-xs text-amber-500 ml-auto">{mastered.length}/{Object.keys(cueAnalysis).length} mastered</span>
-                )}
-              </div>
-              
-              {Object.keys(cueAnalysis).length === 0 ? (
-                <p className="text-amber-400 text-sm">Practice cues to identify triggers</p>
-              ) : (
-                <div className="space-y-2">
-                  {stressful.length > 0 && (
-                    <div>
-                      <p className="text-xs text-red-600 mb-1">🔴 Causes stress</p>
-                      <div className="flex flex-wrap gap-1">
-                        {stressful.map(c => (
-                          <span key={c.name} className="bg-red-50 text-red-700 text-xs px-2 py-1 rounded">
-                            {c.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {workingOn.length > 0 && (
-                    <div>
-                      <p className="text-xs text-amber-600 mb-1">🟡 Working on</p>
-                      <div className="flex flex-wrap gap-1">
-                        {workingOn.map(c => (
-                          <span key={c.name} className="bg-amber-50 text-amber-700 text-xs px-2 py-1 rounded">
-                            {c.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {mastered.length > 0 && (
-                    <div>
-                      <p className="text-xs text-green-600 mb-1">🟢 Mastered</p>
-                      <div className="flex flex-wrap gap-1">
-                        {mastered.map(c => (
-                          <span key={c.name} className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded">
-                            {c.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+          {/* Step 1: Departure Cues */}
+          <Card variant="elevated" padding="md">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-sm">
+                  1
                 </div>
-              )}
+                <h2 className="font-bold text-gray-900">Departure Cues</h2>
+              </div>
+              <span className="text-amber-600 font-semibold text-sm">
+                {masteredCues.length}/{cueProgress.length} mastered
+              </span>
             </div>
 
-            {/* Step 2: Sessions */}
-            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold ${
-                  mastered.length >= 2 ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'
-                }`}>2</span>
-                <p className="text-sm font-medium text-amber-950">Absence Sessions</p>
-                {sessions.length > 0 && (
-                  <span className="text-xs text-amber-500 ml-auto">{sessions.length} sessions</span>
-                )}
-              </div>
-              
-              {sessions.length === 0 ? (
-                <p className="text-amber-400 text-sm">
-                  {mastered.length >= 2 
-                    ? `${dogName} is ready for absence training!` 
-                    : `Master ${2 - mastered.length} more cue${2 - mastered.length > 1 ? 's' : ''} to unlock`}
+            {strugglingCues.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-medium text-red-600 mb-2 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  Causes stress
                 </p>
-              ) : (
-                <div className="space-y-2">
-                  {sessions.slice(0, 5).map((s) => (
-                    <div key={s.id}>
-                      <button
-                        onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
-                            s.dog_response === 'great' ? 'bg-green-100' :
-                            s.dog_response === 'okay' ? 'bg-amber-100' : 'bg-red-100'
-                          }`}>
-                            {s.dog_response === 'great' ? '😊' : s.dog_response === 'okay' ? '😐' : '😟'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-amber-950 truncate">
-                              {s.mission_title || 'Training Session'}
-                            </p>
-                            <p className="text-xs text-amber-500">
-                              {new Date(s.created_at).toLocaleDateString('en-US', { 
-                                month: 'short', day: 'numeric' 
-                              })}
-                              {s.steps_total > 0 && ` • ${s.steps_completed}/${s.steps_total} steps`}
-                            </p>
-                          </div>
-                          <span className="text-amber-400 text-xs">
-                            {expandedSession === s.id ? '▲' : '▼'}
-                          </span>
-                        </div>
-                      </button>
-                      
-                      {expandedSession === s.id && (
-                        <div className="ml-11 mt-1 p-3 bg-amber-50 rounded-lg text-sm space-y-2">
-                          <p className="text-amber-700">
-                            <span className="font-medium">Result:</span>{' '}
-                            {s.dog_response === 'great' ? '😊 Did great!' : 
-                             s.dog_response === 'okay' ? '😐 Okay with some stress' : '😟 Struggled'}
-                          </p>
-                          
-                          {s.mission_steps && s.mission_steps.length > 0 && (
-                            <div>
-                              <p className="text-amber-700 font-medium text-xs mb-1">Steps tried:</p>
-                              <ul className="text-xs text-amber-600 space-y-1">
-                                {s.mission_steps.map((step, i) => (
-                                  <li key={i} className="flex items-start gap-2">
-                                    <span className={i < s.steps_completed ? 'text-green-500' : 'text-amber-400'}>
-                                      {i < s.steps_completed ? '✓' : '○'}
-                                    </span>
-                                    <span className={i < s.steps_completed ? '' : 'opacity-60'}>
-                                      {step}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {s.notes && (
-                            <p className="text-amber-600 text-xs italic border-t border-amber-200 pt-2">
-                              "{s.notes}"
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {strugglingCues.map(cue => (
+                    <button
+                      key={cue.id}
+                      onClick={() => handleCueClick(cue.id)}
+                      className="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm border border-red-100 hover:bg-red-100 transition cursor-pointer"
+                    >
+                      {cue.name}
+                    </button>
                   ))}
-                  {sessions.length > 5 && (
-                    <p className="text-xs text-amber-500 text-center pt-2">
-                      +{sessions.length - 5} more sessions
-                    </p>
-                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Step 3: Videos */}
-            <div className="bg-white rounded-xl p-4 border border-amber-100 mb-3">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 rounded-full bg-purple-500 text-white text-xs flex items-center justify-center font-bold">3</span>
-                <p className="text-sm font-medium text-amber-950">Video Analysis</p>
-                {videoAnalyses.length > 0 && (
-                  <span className="text-xs text-amber-500 ml-auto">{videoAnalyses.length} videos</span>
-                )}
               </div>
+            )}
 
-              {videoAnalyses.length === 0 ? (
-                <p className="text-amber-400 text-sm">Upload videos to track {dogName}'s behavior when alone</p>
-              ) : (
-                <div className="space-y-2">
-                  {videoAnalyses.slice(0, 3).map((v) => {
-                    const { level, emoji } = getVideoAnxiety(v.analysis)
-                    return (
-                      <div key={v.id}>
-                        <button
-                          onClick={() => setExpandedVideo(expandedVideo === v.id ? null : v.id)}
-                          className="w-full text-left"
-                        >
-                          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-amber-50 transition">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${
-                              level === 'Calm' ? 'bg-green-100' :
-                              level === 'Mild' ? 'bg-yellow-100' :
-                              level === 'Moderate' ? 'bg-orange-100' : 'bg-red-100'
-                            }`}>
-                              {emoji}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-amber-950">
-                                {level} anxiety
-                              </p>
-                              <p className="text-xs text-amber-500">
-                                {new Date(v.created_at).toLocaleDateString('en-US', { 
-                                  month: 'short', day: 'numeric' 
-                                })}
-                              </p>
-                            </div>
-                            <span className="text-amber-400 text-xs">
-                              {expandedVideo === v.id ? '▲' : '▼'}
-                            </span>
-                          </div>
-                        </button>
-                        
-                        {expandedVideo === v.id && (
-                          <div className="ml-11 mt-1 p-3 bg-purple-50 rounded-lg text-sm">
-                            <p className="text-purple-800 text-xs whitespace-pre-line">
-                              {v.analysis.substring(0, 500)}
-                              {v.analysis.length > 500 && '...'}
-                            </p>
-                            <Link 
-                              href="/videos" 
-                              className="text-purple-600 text-xs underline mt-2 inline-block"
-                            >
-                              View full analysis →
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {videoAnalyses.length > 3 && (
-                    <p className="text-xs text-amber-500 text-center pt-2">
-                      +{videoAnalyses.length - 3} more videos
-                    </p>
-                  )}
+            {workingCues.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-medium text-amber-600 mb-2 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Working on
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {workingCues.map(cue => (
+                    <button
+                      key={cue.id}
+                      onClick={() => handleCueClick(cue.id)}
+                      className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-sm border border-amber-100 hover:bg-amber-100 transition cursor-pointer"
+                    >
+                      {cue.name}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            {masteredCues.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-green-600 mb-2 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  Mastered
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {masteredCues.map(cue => (
+                    <button
+                      key={cue.id}
+                      onClick={() => handleCueClick(cue.id)}
+                      className="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm border border-green-100 hover:bg-green-100 transition cursor-pointer"
+                    >
+                      {cue.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {cueProgress.length === 0 && (
+              <p className="text-gray-500 text-sm">No cues yet. Start practicing!</p>
+            )}
+          </Card>
+
+          {/* Step 2: Absence Sessions */}
+          <Card variant="elevated" padding="md">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                  masteredCues.length >= 3 ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-500'
+                }`}>
+                  2
+                </div>
+                <h2 className="font-bold text-gray-900">Absence Sessions</h2>
+              </div>
+              <span className="text-amber-600 font-semibold text-sm">
+                {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+              </span>
             </div>
 
-            {/* Quick Actions - New Order: Cues → Sessions → Videos */}
-            <div className="grid grid-cols-3 gap-2">
-              <Link href="/departure-practice" className="bg-amber-600 text-white py-3 rounded-xl font-medium text-center text-sm">
-                Practice Cues
-              </Link>
-              <Link 
-                href="/mission" 
-                className={`py-3 rounded-xl font-medium text-center text-sm ${
-                  mastered.length >= 2 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-200 text-gray-500'
-                }`}
-              >
-                Session
-              </Link>
-              <Link href="/videos" className="bg-purple-100 text-purple-700 py-3 rounded-xl font-medium text-center text-sm">
-                Video
-              </Link>
+            {sessions.length > 0 ? (
+              <SessionList>
+                {sessions.slice(0, 3).map(session => (
+                  <SessionCard
+                    key={session.id}
+                    id={session.id}
+                    date={session.created_at}
+                    duration={session.duration}
+                    targetDuration={session.target_duration}
+                    missionTitle={session.mission_title}
+                    missionSteps={session.mission_steps}
+                    stepsCompleted={session.steps_completed}
+                    stepsTotal={session.mission_steps?.length || 0}
+                    dogResponse={session.dog_response}
+                    ownerFeeling={session.owner_feeling}
+                    notes={session.notes}
+                  />
+                ))}
+              </SessionList>
+            ) : masteredCues.length >= 3 ? (
+              <p className="text-gray-500 text-sm">Ready for absence training! No sessions yet.</p>
+            ) : (
+              <p className="text-gray-500 text-sm">Master 3 cues to unlock absence training.</p>
+            )}
+          </Card>
+
+          {/* Step 3: Video Analysis */}
+          <Card 
+            variant="elevated" 
+            padding="md" 
+            pressable 
+            onClick={() => router.push('/videos')}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-sm">
+                  3
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-900">Video Analysis</h2>
+                  <p className="text-gray-500 text-sm">Upload videos to track behavior</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
             </div>
-          </>
-        )}
-      </div>
+          </Card>
+
+          {/* Quick Actions */}
+          <div className="flex gap-3">
+            <Button onClick={() => router.push('/departure-practice')} variant="secondary" fullWidth>
+              <Key className="w-4 h-4" />
+              Cues
+            </Button>
+            <Button onClick={() => router.push('/mission')} variant="secondary" fullWidth>
+              <Footprints className="w-4 h-4" />
+              Session
+            </Button>
+            <Button onClick={() => router.push('/videos')} variant="secondary" fullWidth>
+              <Video className="w-4 h-4" />
+              Video
+            </Button>
+          </div>
+
+        </div>
+      </main>
+
+      <BottomNavSpacer />
+      <BottomNav />
     </div>
   )
 }

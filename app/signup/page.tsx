@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../supabase'
+import { ArrowLeft } from 'lucide-react'
 
 function SignupForm() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -66,7 +68,7 @@ function SignupForm() {
     if (error) {
       setMessage(error.message)
     } else {
-      window.location.href = '/onboarding'
+      router.push('/onboarding')
     }
   }
 
@@ -76,7 +78,7 @@ function SignupForm() {
         Create Account
       </h1>
       <p className="text-amber-800/70 mb-8">
-        Start your dog's calm journey today
+        Start your dog&apos;s calm journey today
       </p>
 
       {/* Consent checkbox - FIRST */}
@@ -175,27 +177,37 @@ function SignupForm() {
 
       <p className="mt-6 text-center text-amber-800/70">
         Already have an account?{' '}
-        <a href="/login" className="text-amber-700 font-semibold hover:underline">
+        <Link href="/login" className="text-amber-700 font-semibold hover:underline">
           Log in
-        </a>
+        </Link>
       </p>
     </div>
   )
 }
 
 export default function SignupPage() {
+  const router = useRouter()
+  
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       {/* Nav */}
       <nav className="bg-[#FDFBF7] border-b border-amber-900/5">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl flex items-center justify-center">
-              <span className="text-white text-lg">🐾</span>
-            </div>
-            <span className="font-semibold text-amber-950 text-xl tracking-tight">PawCalm</span>
-            <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">BETA</span>
-          </Link>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => router.push('/')}
+              className="p-2 -ml-2 hover:bg-amber-100 rounded-full transition"
+            >
+              <ArrowLeft className="w-5 h-5 text-amber-700" />
+            </button>
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-9 h-9 bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl flex items-center justify-center">
+                <span className="text-white text-lg">🐾</span>
+              </div>
+              <span className="font-semibold text-amber-950 text-xl tracking-tight">PawCalm</span>
+              <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">BETA</span>
+            </Link>
+          </div>
         </div>
       </nav>
 

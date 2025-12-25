@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
+import { ArrowLeft } from 'lucide-react'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -45,7 +48,7 @@ export default function LoginPage() {
     if (error) {
       setMessage(error.message)
     } else {
-      window.location.href = '/dashboard'
+      router.push('/dashboard')
     }
   }
 
@@ -54,13 +57,21 @@ export default function LoginPage() {
       {/* Nav */}
       <nav className="bg-[#FDFBF7] border-b border-amber-900/5">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl flex items-center justify-center">
-              <span className="text-white text-lg">🐾</span>
-            </div>
-            <span className="font-semibold text-amber-950 text-xl tracking-tight">PawCalm</span>
-            <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">BETA</span>
-          </Link>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => router.push('/')}
+              className="p-2 -ml-2 hover:bg-amber-100 rounded-full transition"
+            >
+              <ArrowLeft className="w-5 h-5 text-amber-700" />
+            </button>
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-9 h-9 bg-gradient-to-br from-amber-600 to-amber-800 rounded-xl flex items-center justify-center">
+                <span className="text-white text-lg">🐾</span>
+              </div>
+              <span className="font-semibold text-amber-950 text-xl tracking-tight">PawCalm</span>
+              <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">BETA</span>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -143,7 +154,7 @@ export default function LoginPage() {
           )}
 
           <p className="mt-6 text-center text-amber-800/70">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link href="/signup" className="text-amber-700 font-semibold hover:underline">
               Sign up
             </Link>

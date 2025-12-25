@@ -1,831 +1,483 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
+import { useSelectedDog } from '../hooks/useSelectedDog'
+import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Card } from '../components/ui/Card'
+import { Button } from '../components/ui/Button'
+import { CueCard, CueList } from '../components/domain/CueCard'
+import { Plus, Sparkles, RotateCcw, Check } from 'lucide-react'
 
 type Cue = {
   id: string
   name: string
-  instructions: string
-  success_looks_like: string
-  if_struggling: string
-  icon: string
-  isCustom?: boolean
-  isAiGenerated?: boolean
-  priority?: 'high' | 'medium' | 'low'
-  reason?: string
-}
-
-type CueWithStatus = Cue & {
-  status: 'not-started' | 'stressful' | 'working-on' | 'mastered'
   calmCount: number
   totalCount: number
-  calmNeeded: number
 }
 
-type Dog = {
-  id: string
-  name: string
-  breed: string
-  age: string
-  baseline: number
-  behavior: string
-  triggers: string[]
-  behaviors: string[]
-  severity: string
-  owner_schedule: string
-  leave_duration: string
-  custom_triggers: string[]
-}
-
-const CALM_NEEDED_TO_MASTER = 5
+type PracticeResponse = 'calm' | 'slight_reaction' | 'anxious'
 
 export default function DeparturePracticePage() {
-  const [dog, setDog] = useState<Dog | null>(null)
-  const [cues, setCues] = useState<CueWithStatus[]>([])
-  const [loading, setLoading] = useState(true)
-  const [generatingCues, setGeneratingCues] = useState(false)
-  const [personalizedMessage, setPersonalizedMessage] = useState('')
-  const [selectedCue, setSelectedCue] = useState<CueWithStatus | null>(null)
-  const [saving, setSaving] = useState(false)
+  const router = useRouter()
+  const { dog, loading: dogLoading } = useSelectedDog()
+  
+  const [cues, setCues] = useState<Cue[]>([])
+  const [selectedCue, setSelectedCue] = useState<Cue | null>(null)
+  const [practiceMode, setPracticeMode] = useState(false)
   const [showResult, setShowResult] = useState(false)
-  const [lastResponse, setLastResponse] = useState<'calm' | 'noticed' | 'anxious' | null>(null)
+  const [lastResponse, setLastResponse] = useState<PracticeResponse | null>(null)
+  const [loading, setLoading] = useState(true)
   const [showAddCue, setShowAddCue] = useState(false)
-  const [newTriggerName, setNewTriggerName] = useState('')
-  const [generatingCue, setGeneratingCue] = useState(false)
-  const [generatedCue, setGeneratedCue] = useState<{ instructions: string; success_looks_like: string; if_struggling: string } | null>(null)
-  const [savingCue, setSavingCue] = useState(false)
+  const [newCueName, setNewCueName] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  const loadCues = useCallback(async () => {
+    if (!dog) return
+
+    const { data: customCues } = await supabase
+      .from('custom_cues')
+      .select('id, name')
+      .eq('dog_id', dog.id)
+
+    const { data: practices } = await supabase
+      .from('cue_practices')
+      .select('cues')
+      .eq('dog_id', dog.id)
+
+    const cueStats: Record<string, { calm: number; total: number }> = {}
+
+    customCues?.forEach(cue => {
+      cueStats[cue.id] = { calm: 0, total: 0 }
+    })
+
+    practices?.forEach(practice => {
+      practice.cues?.forEach((c: any) => {
+        if (cueStats[c.cue_id]) {
+          cueStats[c.cue_id].total++
+          if (c.response === 'calm') {
+            cueStats[c.cue_id].calm++
+          }
+        }
+      })
+    })
+
+    const cuesWithStats: Cue[] = customCues?.map(cue => ({
+      id: cue.id,
+      name: cue.name,
+      calmCount: cueStats[cue.id]?.calm || 0,
+      totalCount: cueStats[cue.id]?.total || 0,
+    })) || []
+
+    setCues(cuesWithStats)
+    setLoading(false)
+  }, [dog])
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      window.location.href = '/login'
-      return
+    if (dog) {
+      loadCues()
     }
+  }, [dog, loadCues])
 
-    const { data: dogData } = await supabase
-      .from('dogs')
-      .select('*')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single()
-
-    if (dogData) {
-      setDog(dogData)
-
-      // Fetch practice history
-      const { data: practices } = await supabase
-        .from('cue_practices')
-        .select('*')
-        .eq('dog_id', dogData.id)
-        .order('created_at', { ascending: false })
-
-      const cueStats: Record<string, { calm: number; total: number }> = {}
-      practices?.forEach(practice => {
-        practice.cues?.forEach((cue: any) => {
-          if (!cueStats[cue.cue_id]) {
-            cueStats[cue.cue_id] = { calm: 0, total: 0 }
-          }
-          cueStats[cue.cue_id].total++
-          if (cue.response === 'calm') {
-            cueStats[cue.cue_id].calm++
-          }
-        })
-      })
-
-      // Check for existing cues
-      const { data: existingCues } = await supabase
-        .from('custom_cues')
-        .select('*')
-        .eq('dog_id', dogData.id)
-        .order('created_at', { ascending: true })
-
-      const customCues = existingCues?.filter(c => c.is_custom) || []
-      const aiCues = existingCues?.filter(c => c.is_ai_generated) || []
-
-      // If we don't have enough AI cues, generate them
-      if (aiCues.length < 6) {
-        setLoading(false)
-        await generatePersonalizedCues(dogData, cueStats, customCues)
-      } else {
-        const allCues: Cue[] = existingCues!.map((c: any) => ({
-          id: c.id.toString(),
-          name: c.name,
-          instructions: c.instructions,
-          success_looks_like: c.success_looks_like,
-          if_struggling: c.if_struggling || 'Try a simpler version, or practice when your dog is more relaxed.',
-          icon: c.icon || '⭐',
-          isCustom: c.is_custom || false,
-          isAiGenerated: c.is_ai_generated || false,
-          priority: c.priority || 'medium',
-          reason: c.reason || ''
-        }))
-
-        const cuesWithStatus = addStatusToCues(allCues, cueStats)
-        setCues(cuesWithStatus)
-        setLoading(false)
+  // Handle deep link from Progress page
+  useEffect(() => {
+    if (cues.length > 0) {
+      const specificCueId = localStorage.getItem('practiceSpecificCue')
+      if (specificCueId) {
+        localStorage.removeItem('practiceSpecificCue')
+        const cueToStart = cues.find(c => c.id === specificCueId)
+        if (cueToStart) {
+          startPractice(cueToStart)
+        }
       }
-    } else {
-      setLoading(false)
     }
-  }
+  }, [cues])
 
-  const generatePersonalizedCues = async (
-    dogData: Dog,
-    cueStats: Record<string, { calm: number; total: number }>,
-    existingCustomCues: any[] = []
-  ) => {
-    setGeneratingCues(true)
+  const generateCues = async () => {
+    if (!dog) return
+    setGenerating(true)
 
     try {
-      const response = await fetch('/api/generate-cue-list', {
+      const response = await fetch('/api/generate-cues-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dog: dogData })
+        body: JSON.stringify({ dog }),
       })
 
-      const data = await response.json()
+      if (response.ok) {
+        const data = await response.json()
+        console.log('API returned:', data)
+        console.log('Dog ID:', dog.id, typeof dog.id)
+        
+        // Save cues to database
+        if (data.cues && data.cues.length > 0) {
+          const cuesToInsert = data.cues.map((cue: any) => ({
+            dog_id: dog.id,
+            name: cue.name,
+            icon: cue.icon,
+            instructions: cue.instructions,
+            success_looks_like: cue.success_looks_like,
+            if_struggling: cue.if_struggling,
+            priority: cue.priority,
+            reason: cue.reason,
+            is_ai_generated: true,
+            is_custom: false,
+          }))
 
-      if (data.error) {
-        console.error('Error generating cues:', data.error)
-        setGeneratingCues(false)
-        return
+          console.log('Inserting cues:', cuesToInsert)
+
+          const { data: insertedData, error } = await supabase
+            .from('custom_cues')
+            .insert(cuesToInsert)
+            .select()
+
+          if (error) {
+            console.error('Error saving cues:', JSON.stringify(error, null, 2))
+          } else {
+            console.log('Inserted successfully:', insertedData)
+          }
+        }
+        
+        await loadCues()
       }
-
-      setPersonalizedMessage(data.personalized_message || '')
-
-      const cuesToSave = data.cues.map((cue: any) => ({
-        dog_id: dogData.id,
-        name: cue.name,
-        icon: cue.icon,
-        instructions: cue.instructions,
-        success_looks_like: cue.success_looks_like,
-        if_struggling: cue.if_struggling,
-        is_ai_generated: true,
-        is_custom: false,
-        priority: cue.priority,
-        reason: cue.reason
-      }))
-
-      const { data: savedCues, error } = await supabase
-        .from('custom_cues')
-        .insert(cuesToSave)
-        .select()
-
-      if (error) {
-        console.error('Error saving cues:', error)
-      }
-
-      const allCuesFromDB = [
-        ...existingCustomCues.map((c: any) => ({
-          id: c.id.toString(),
-          name: c.name,
-          instructions: c.instructions,
-          success_looks_like: c.success_looks_like,
-          if_struggling: c.if_struggling || 'Try a simpler version.',
-          icon: c.icon || '⭐',
-          isCustom: true,
-          isAiGenerated: false,
-          priority: c.priority || 'high',
-          reason: c.reason || ''
-        })),
-        ...(savedCues || []).map((c: any) => ({
-          id: c.id.toString(),
-          name: c.name,
-          instructions: c.instructions,
-          success_looks_like: c.success_looks_like,
-          if_struggling: c.if_struggling,
-          icon: c.icon,
-          isCustom: false,
-          isAiGenerated: true,
-          priority: c.priority,
-          reason: c.reason
-        }))
-      ]
-
-      const cuesWithStatus = addStatusToCues(allCuesFromDB, cueStats)
-      setCues(cuesWithStatus)
     } catch (error) {
       console.error('Error generating cues:', error)
     }
 
-    setGeneratingCues(false)
+    setGenerating(false)
   }
 
-  const addStatusToCues = (allCues: Cue[], cueStats: Record<string, { calm: number; total: number }>): CueWithStatus[] => {
-    return allCues.map(cue => {
-      const stats = cueStats[cue.id] || { calm: 0, total: 0 }
-      const calmRate = stats.total > 0 ? stats.calm / stats.total : 0
-
-      let status: CueWithStatus['status'] = 'not-started'
-      if (stats.total === 0) {
-        status = 'not-started'
-      } else if (stats.calm >= CALM_NEEDED_TO_MASTER && calmRate >= 0.7) {
-        status = 'mastered'
-      } else if (calmRate < 0.3 && stats.total >= 2) {
-        status = 'stressful'
-      } else {
-        status = 'working-on'
-      }
-
-      return {
-        ...cue,
-        status,
-        calmCount: stats.calm,
-        totalCount: stats.total,
-        calmNeeded: Math.max(0, CALM_NEEDED_TO_MASTER - stats.calm)
-      }
-    })
-  }
-
-  const handleSelectCue = (cue: CueWithStatus) => {
-    setSelectedCue(cue)
-    setShowResult(false)
-    setLastResponse(null)
-  }
-
-  const handleLogResponse = async (response: 'calm' | 'noticed' | 'anxious') => {
-    if (!selectedCue || !dog) return
-
-    setSaving(true)
-    setLastResponse(response)
+  const addCustomCue = async () => {
+    if (!dog || !newCueName.trim()) return
 
     const { error } = await supabase
-      .from('cue_practices')
-      .insert({
-        dog_id: dog.id,
-        cues: [{
-          cue_id: selectedCue.id,
-          cue_name: selectedCue.name,
-          response: response
-        }]
-      })
-
-    if (error) {
-      console.error('Error saving:', error)
-      alert('Failed to save. Please try again.')
-      setSaving(false)
-      return
-    }
-
-    setCues(prev => prev.map(cue => {
-      if (cue.id !== selectedCue.id) return cue
-
-      const newCalmCount = response === 'calm' ? cue.calmCount + 1 : cue.calmCount
-      const newTotalCount = cue.totalCount + 1
-      const calmRate = newCalmCount / newTotalCount
-
-      let newStatus: CueWithStatus['status'] = cue.status
-      if (newCalmCount >= CALM_NEEDED_TO_MASTER && calmRate >= 0.7) {
-        newStatus = 'mastered'
-      } else if (calmRate < 0.3 && newTotalCount >= 2) {
-        newStatus = 'stressful'
-      } else {
-        newStatus = 'working-on'
-      }
-
-      return {
-        ...cue,
-        status: newStatus,
-        calmCount: newCalmCount,
-        totalCount: newTotalCount,
-        calmNeeded: Math.max(0, CALM_NEEDED_TO_MASTER - newCalmCount)
-      }
-    }))
-
-    setSelectedCue(prev => {
-      if (!prev) return null
-      const newCalmCount = response === 'calm' ? prev.calmCount + 1 : prev.calmCount
-      const newTotalCount = prev.totalCount + 1
-      return {
-        ...prev,
-        calmCount: newCalmCount,
-        totalCount: newTotalCount,
-        calmNeeded: Math.max(0, CALM_NEEDED_TO_MASTER - newCalmCount)
-      }
-    })
-
-    setSaving(false)
-    setShowResult(true)
-  }
-
-  const handleBackToList = () => {
-    setSelectedCue(null)
-    setShowResult(false)
-    setLastResponse(null)
-    loadData()
-  }
-
-  const handleGenerateCue = async () => {
-    if (!newTriggerName.trim() || !dog) return
-
-    setGeneratingCue(true)
-    setGeneratedCue(null)
-
-    try {
-      const response = await fetch('/api/generate-cue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          triggerName: newTriggerName,
-          dogName: dog.name
-        })
-      })
-
-      const data = await response.json()
-      if (data.error) {
-        alert('Failed to generate. Please try again.')
-      } else {
-        setGeneratedCue(data)
-      }
-    } catch (error) {
-      console.error('Error generating cue:', error)
-      alert('Failed to generate. Please try again.')
-    }
-
-    setGeneratingCue(false)
-  }
-
-  const handleSaveCue = async () => {
-    if (!dog || !newTriggerName || !generatedCue) return
-
-    setSavingCue(true)
-
-    const { data: savedCue, error } = await supabase
       .from('custom_cues')
       .insert({
         dog_id: dog.id,
-        name: newTriggerName,
-        instructions: generatedCue.instructions,
-        success_looks_like: generatedCue.success_looks_like,
-        if_struggling: generatedCue.if_struggling,
-        icon: '⭐',
+        name: newCueName.trim(),
         is_custom: true,
         is_ai_generated: false,
-        priority: 'high'
       })
-      .select()
-      .single()
 
-    if (error) {
-      console.error('Error adding cue:', error)
-      alert('Failed to add trigger. Please try again.')
-      setSavingCue(false)
-      return
+    if (!error) {
+      setNewCueName('')
+      setShowAddCue(false)
+      loadCues()
     }
-
-    if (savedCue) {
-      const newCue: CueWithStatus = {
-        id: savedCue.id.toString(),
-        name: savedCue.name,
-        instructions: savedCue.instructions,
-        success_looks_like: savedCue.success_looks_like,
-        if_struggling: savedCue.if_struggling,
-        icon: '⭐',
-        isCustom: true,
-        isAiGenerated: false,
-        priority: 'high',
-        status: 'not-started',
-        calmCount: 0,
-        totalCount: 0,
-        calmNeeded: CALM_NEEDED_TO_MASTER
-      }
-      setCues(prev => [newCue, ...prev])
-    }
-
-    setNewTriggerName('')
-    setGeneratedCue(null)
-    setShowAddCue(false)
-    setSavingCue(false)
   }
 
-  const getMasteredCount = () => cues.filter(c => c.status === 'mastered').length
+  const startPractice = (cue: Cue) => {
+    setSelectedCue(cue)
+    setPracticeMode(true)
+    setShowResult(false)
+    setLastResponse(null)
+  }
 
-  const sortedCues = [...cues].sort((a, b) => {
-    if (a.isCustom && !b.isCustom) return -1
-    if (!a.isCustom && b.isCustom) return 1
-    const priorityOrder = { high: 0, medium: 1, low: 2 }
-    return (priorityOrder[a.priority || 'medium'] || 1) - (priorityOrder[b.priority || 'medium'] || 1)
-  })
+  const logResponse = async (response: PracticeResponse) => {
+    if (!dog || !selectedCue) return
 
-  const customCues = sortedCues.filter(c => c.isCustom)
-  const aiCues = sortedCues.filter(c => !c.isCustom)
+    setLastResponse(response)
+    setShowResult(true)
 
-  if (loading) {
+    await supabase.from('cue_practices').insert({
+      dog_id: dog.id,
+      cues: [{
+        cue_id: selectedCue.id,
+        cue_name: selectedCue.name,
+        response: response,
+      }],
+    })
+
+    loadCues()
+  }
+
+  const finishPractice = () => {
+    setPracticeMode(false)
+    setSelectedCue(null)
+    setShowResult(false)
+    setLastResponse(null)
+    router.push('/dashboard')
+  }
+
+  const practiceAnother = () => {
+    setShowResult(false)
+    setLastResponse(null)
+    setSelectedCue(null)
+    setPracticeMode(false)
+  }
+
+  const isLoading = dogLoading || loading
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
-        <p className="text-gray-700">Loading...</p>
-      </div>
-    )
-  }
-
-  if (generatingCues) {
-    return (
-      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
-          <div className="animate-pulse">
-            <span className="text-5xl mb-4 block">🧠</span>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Creating {dog?.name}'s Training Plan</h2>
-            <p className="text-gray-600">
-              Analyzing triggers and behaviors to build a personalized cue list...
-            </p>
-          </div>
+        <div className="animate-pulse flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-amber-200" />
+          <div className="h-4 w-24 bg-amber-200 rounded" />
         </div>
       </div>
     )
   }
 
-  // Add custom cue form
-  if (showAddCue) {
+  // Practice Mode - Show Result
+  if (practiceMode && showResult && selectedCue) {
     return (
-      <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
-        <div className="max-w-lg mx-auto">
-          <button
-            onClick={() => { setShowAddCue(false); setNewTriggerName(''); setGeneratedCue(null); }}
-            className="text-amber-700 hover:underline mb-6 block font-medium"
-          >
-            ← Back
-          </button>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h1 className="text-xl font-bold text-gray-900 mb-2">Add Custom Trigger</h1>
-            <p className="text-gray-600 text-sm mb-6">
-              What else triggers {dog?.name}'s anxiety?
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-800 mb-1">
-                  What's the trigger?
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTriggerName}
-                    onChange={(e) => { setNewTriggerName(e.target.value); setGeneratedCue(null); }}
-                    placeholder="e.g., Grab laptop, Put on makeup"
-                    className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                  />
-                  <button
-                    onClick={handleGenerateCue}
-                    disabled={!newTriggerName.trim() || generatingCue}
-                    className="bg-amber-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-amber-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  >
-                    {generatingCue ? '...' : 'Go'}
-                  </button>
-                </div>
-              </div>
-
-              {generatingCue && (
-                <div className="text-center py-8">
-                  <div className="animate-pulse">
-                    <p className="text-2xl mb-2">🧠</p>
-                    <p className="text-gray-600">Creating practice instructions...</p>
-                  </div>
-                </div>
-              )}
-
-              {generatedCue && (
-                <div className="space-y-3">
-                  <div className="bg-amber-50 rounded-xl p-4">
-                    <h2 className="font-semibold text-amber-900 mb-1 text-sm">📋 What to do:</h2>
-                    <p className="text-amber-900 text-sm">{generatedCue.instructions}</p>
-                  </div>
-
-                  <div className="bg-green-50 rounded-xl p-4">
-                    <h2 className="font-semibold text-green-900 mb-1 text-sm">✅ Success looks like:</h2>
-                    <p className="text-green-900 text-sm">{generatedCue.success_looks_like}</p>
-                  </div>
-
-                  <div className="bg-blue-50 rounded-xl p-4">
-                    <h2 className="font-semibold text-blue-900 mb-1 text-sm">💡 If {dog?.name} struggles:</h2>
-                    <p className="text-blue-900 text-sm">{generatedCue.if_struggling}</p>
-                  </div>
-
-                  <button
-                    onClick={handleSaveCue}
-                    disabled={savingCue}
-                    className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 transition disabled:bg-gray-300"
-                  >
-                    {savingCue ? 'Adding...' : 'Add This Trigger'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Selected cue screen
-  if (selectedCue) {
-    if (showResult) {
-      const justMastered = selectedCue.calmNeeded === 0 && lastResponse === 'calm'
-
-      return (
-        <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
+      <div className="min-h-screen bg-[#FDFBF7]">
+        <PageHeader title="Practice Complete" />
+        
+        <main className="px-4 py-6">
           <div className="max-w-lg mx-auto">
-            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-              {lastResponse === 'calm' && (
-                <>
-                  <span className="text-6xl mb-4 block">🎉</span>
-                  <h1 className="text-2xl font-bold text-green-700 mb-2">
-                    {justMastered ? 'Cue Mastered!' : 'Great Work!'}
-                  </h1>
-                  <p className="text-gray-700 mb-4">
-                    {justMastered
-                      ? `${dog?.name} has mastered "${selectedCue.name}"! That's ${getMasteredCount()} of 3 cues needed for absence training.`
-                      : `${dog?.name} stayed calm! ${selectedCue.calmNeeded > 0 ? `${selectedCue.calmNeeded} more calm response${selectedCue.calmNeeded > 1 ? 's' : ''} to master this cue.` : ''}`
-                    }
-                  </p>
-                  {justMastered && getMasteredCount() >= 3 && (
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                      <p className="text-green-800 text-sm">
-                        <strong>🚪 Absence Training Unlocked!</strong> {dog?.name} is ready to start real absence sessions.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-              {lastResponse === 'noticed' && (
-                <>
-                  <span className="text-6xl mb-4 block">👀</span>
-                  <h1 className="text-2xl font-bold text-amber-700 mb-2">Progress!</h1>
-                  <p className="text-gray-700 mb-4">
-                    {dog?.name} noticed but didn't panic — that's okay! Keep practicing to build confidence.
-                  </p>
-                </>
-              )}
-              {lastResponse === 'anxious' && (
-                <>
-                  <span className="text-6xl mb-4 block">💙</span>
-                  <h1 className="text-2xl font-bold text-blue-700 mb-2">That's Okay</h1>
-                  <p className="text-gray-700 mb-4">
-                    {dog?.name} found this stressful. Try the easier version next time, or practice at a calmer moment.
-                  </p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-left">
-                    <p className="text-blue-800 text-sm">
-                      <strong>Tip:</strong> {selectedCue.if_struggling}
-                    </p>
-                  </div>
-                </>
-              )}
+            <Card variant="elevated" padding="lg" className="text-center">
+              <span className="text-6xl mb-4 block">
+                {lastResponse === 'calm' ? '🎉' : lastResponse === 'slight_reaction' ? '👍' : '💪'}
+              </span>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                {lastResponse === 'calm' && 'Amazing!'}
+                {lastResponse === 'slight_reaction' && 'Good effort!'}
+                {lastResponse === 'anxious' && 'Keep going!'}
+              </h2>
+              <p className="text-gray-600 mb-6">
+                {lastResponse === 'calm' && `${dog?.name} stayed calm! That's great progress.`}
+                {lastResponse === 'slight_reaction' && `${dog?.name} had a small reaction. That's normal - keep practicing!`}
+                {lastResponse === 'anxious' && `${dog?.name} was anxious this time. We'll get there with more practice.`}
+              </p>
 
-              <div className="space-y-3 mt-6">
-                <button
-                  onClick={() => { setShowResult(false); setLastResponse(null); }}
-                  className="w-full bg-amber-600 text-white py-3 rounded-xl font-semibold hover:bg-amber-700 transition"
-                >
-                  Practice Again
-                </button>
-                <button
-                  onClick={handleBackToList}
-                  className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition"
-                >
-                  Choose Different Cue
-                </button>
-                <Link
-                  href="/dashboard"
-                  className="block w-full text-amber-700 py-2 text-sm hover:underline"
-                >
-                  ← Back to Dashboard
-                </Link>
+              {/* Progress update */}
+              <Card variant="filled" padding="md" className="mb-6 text-left">
+                <p className="text-amber-800 text-sm">
+                  <strong>📊 {selectedCue.name}:</strong> {selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0)} calm responses out of {selectedCue.totalCount + 1} total
+                  {selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0) >= 5 && ' — Almost mastered!'}
+                </p>
+              </Card>
+
+              <div className="space-y-3">
+                <Button onClick={practiceAnother} fullWidth>
+                  Practice Another Cue
+                </Button>
+                <Button onClick={finishPractice} variant="secondary" fullWidth>
+                  Done for Now
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
-        </div>
-      )
-    }
+        </main>
 
-    return (
-      <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
-        <div className="max-w-lg mx-auto">
-          <button
-            onClick={handleBackToList}
-            className="text-amber-700 hover:underline mb-6 block font-medium"
-          >
-            ← Back to all cues
-          </button>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <div className="text-center mb-4">
-              <span className="text-5xl mb-3 block">{selectedCue.icon}</span>
-              <h1 className="text-2xl font-bold text-gray-900">{selectedCue.name}</h1>
-              {selectedCue.isCustom && (
-                <span className="inline-block mt-1 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                  Your trigger
-                </span>
-              )}
-              {selectedCue.reason && !selectedCue.isCustom && (
-                <p className="text-gray-500 text-xs mt-2 italic">{selectedCue.reason}</p>
-              )}
-
-              {selectedCue.totalCount > 0 && (
-                <div className="mt-3 max-w-xs mx-auto">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600">Progress</span>
-                    <span className="text-amber-700 font-medium">{selectedCue.calmCount}/{CALM_NEEDED_TO_MASTER} calm</span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 rounded-full transition-all"
-                      style={{ width: `${Math.min(100, (selectedCue.calmCount / CALM_NEEDED_TO_MASTER) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-amber-50 rounded-xl p-4 mb-3">
-              <h2 className="font-semibold text-amber-900 mb-1 text-sm">📋 What to do:</h2>
-              <p className="text-amber-900 text-sm">{selectedCue.instructions}</p>
-            </div>
-
-            <div className="bg-green-50 rounded-xl p-4 mb-3">
-              <h2 className="font-semibold text-green-900 mb-1 text-sm">✅ Success looks like:</h2>
-              <p className="text-green-900 text-sm">{selectedCue.success_looks_like}</p>
-            </div>
-
-            <div className="bg-blue-50 rounded-xl p-4">
-              <h2 className="font-semibold text-blue-900 mb-1 text-sm">💡 If {dog?.name} struggles:</h2>
-              <p className="text-blue-900 text-sm">{selectedCue.if_struggling}</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h2 className="font-bold text-gray-900 mb-4 text-center">How did {dog?.name} respond?</h2>
-            <div className="space-y-3">
-              <button
-                onClick={() => handleLogResponse('calm')}
-                disabled={saving}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 transition disabled:opacity-50"
-              >
-                <span className="text-3xl">😊</span>
-                <div className="text-left">
-                  <p className="font-semibold text-green-800">Calm</p>
-                  <p className="text-green-700 text-sm">Stayed relaxed, no anxiety signs</p>
-                </div>
-              </button>
-              <button
-                onClick={() => handleLogResponse('noticed')}
-                disabled={saving}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 transition disabled:opacity-50"
-              >
-                <span className="text-3xl">👀</span>
-                <div className="text-left">
-                  <p className="font-semibold text-amber-800">Noticed</p>
-                  <p className="text-amber-700 text-sm">Looked up or followed, but no panic</p>
-                </div>
-              </button>
-              <button
-                onClick={() => handleLogResponse('anxious')}
-                disabled={saving}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-red-200 bg-red-50 hover:bg-red-100 transition disabled:opacity-50"
-              >
-                <span className="text-3xl">😰</span>
-                <div className="text-left">
-                  <p className="font-semibold text-red-800">Anxious</p>
-                  <p className="text-red-700 text-sm">Whining, pacing, or panicking</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
+        <BottomNavSpacer />
+        <BottomNav />
       </div>
     )
   }
 
-  // Cue selection list
-  return (
-    <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
-      <div className="max-w-lg mx-auto">
-        <div className="mb-6">
-          <Link href="/dashboard" className="text-amber-700 hover:underline font-medium">← Back to Dashboard</Link>
-        </div>
+  // Practice Mode - Log Response
+  if (practiceMode && selectedCue) {
+    return (
+      <div className="min-h-screen bg-[#FDFBF7]">
+        <PageHeader title="Practice Cue" showBack onBack={() => {
+          setPracticeMode(false)
+          setSelectedCue(null)
+        }} />
+        
+        <main className="px-4 py-6">
+          <div className="max-w-lg mx-auto space-y-6">
+            
+            {/* Current Cue */}
+            <Card variant="elevated" padding="lg" className="text-center">
+              <span className="text-5xl mb-4 block">🔑</span>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">{selectedCue.name}</h2>
+              <p className="text-gray-600">
+                Perform this action, then record how {dog?.name} reacted.
+              </p>
+            </Card>
 
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Practice a Cue</h1>
-          <p className="text-gray-600">
-            Pick one trigger to work on with {dog?.name}
-          </p>
-        </div>
+            {/* Instructions */}
+            <Card variant="filled" padding="md" className="bg-blue-50">
+              <h3 className="font-semibold text-blue-900 mb-2">📋 How to Practice</h3>
+              <ol className="text-blue-800 text-sm space-y-2">
+                <li>1. Make sure {dog?.name} can see you</li>
+                <li>2. Calmly perform the action: <strong>{selectedCue.name.toLowerCase()}</strong></li>
+                <li>3. Watch {dog?.name}&apos;s reaction for 5-10 seconds</li>
+                <li>4. Record the response below</li>
+                <li>5. <strong>Don&apos;t leave!</strong> This is just practice</li>
+              </ol>
+            </Card>
 
-        {/* Progress toward absence training */}
-        <div className="bg-white rounded-xl p-4 mb-6 border border-amber-100">
-          <div className="flex items-center justify-between">
+            {/* What to Watch For */}
+            <Card variant="outlined" padding="md">
+              <h3 className="font-semibold text-gray-900 mb-3">👀 What to Watch For</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-green-500">✓</span>
+                  <p className="text-gray-700"><strong>Calm:</strong> Relaxed body, no change in behavior, might glance but looks away</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-500">~</span>
+                  <p className="text-gray-700"><strong>Slight reaction:</strong> Ears perk up, watches you, mild interest but settles</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-red-500">!</span>
+                  <p className="text-gray-700"><strong>Anxious:</strong> Gets up, follows you, whines, paces, or shows stress signals</p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Response Buttons */}
             <div>
-              <p className="text-sm text-gray-600">Progress to absence training</p>
-              <p className="font-bold text-gray-900">{getMasteredCount()}/3 cues mastered</p>
-            </div>
-            {getMasteredCount() >= 3 ? (
-              <Link
-                href="/mission"
-                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition"
-              >
-                Start Session →
-              </Link>
-            ) : (
-              <span className="text-2xl">🔒</span>
-            )}
-          </div>
-        </div>
-
-        {/* Add custom cue button */}
-        <button
-          onClick={() => setShowAddCue(true)}
-          className="w-full bg-white rounded-xl p-4 border-2 border-dashed border-purple-300 hover:border-purple-400 hover:bg-purple-50 transition text-left mb-4"
-        >
-          <div className="flex items-center gap-4">
-            <span className="text-3xl">➕</span>
-            <div className="flex-1">
-              <p className="font-semibold text-purple-700">Add Your Own Trigger</p>
-              <p className="text-purple-600 text-sm">Something specific to {dog?.name}?</p>
-            </div>
-          </div>
-        </button>
-
-        {/* Custom cues (user-added) */}
-        {customCues.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2 px-1">
-              ⭐ Your Triggers
-            </p>
-            <div className="space-y-2">
-              {customCues.map(cue => (
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                How did {dog?.name} react?
+              </h3>
+              <div className="space-y-3">
                 <button
-                  key={cue.id}
-                  onClick={() => handleSelectCue(cue)}
-                  className="w-full bg-white rounded-xl p-4 border border-purple-200 shadow-sm hover:shadow-md transition text-left"
+                  onClick={() => logResponse('calm')}
+                  className="w-full flex items-center gap-4 p-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition"
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">{cue.icon}</span>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{cue.name}</p>
-                      <p className="text-gray-600 text-sm">
-                        {cue.status === 'mastered' && '🟢 Mastered'}
-                        {cue.status === 'stressful' && '🔴 Needs work'}
-                        {cue.status === 'working-on' && `🟡 ${cue.calmNeeded} more to master`}
-                        {cue.status === 'not-started' && 'Not started yet'}
-                      </p>
-                    </div>
-                    <span className="text-gray-400">→</span>
+                  <span className="text-3xl">😎</span>
+                  <div className="text-left">
+                    <p className="font-semibold text-lg">Calm</p>
+                    <p className="text-sm opacity-80">No reaction, relaxed</p>
                   </div>
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* AI-generated cues */}
-        {aiCues.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                🧠 Recommended for {dog?.name}
-              </p>
-            </div>
-            {personalizedMessage && (
-              <p className="text-xs text-gray-500 mb-3 px-1 italic">
-                {personalizedMessage}
-              </p>
-            )}
-            <div className="space-y-2">
-              {aiCues.map(cue => (
                 <button
-                  key={cue.id}
-                  onClick={() => handleSelectCue(cue)}
-                  className="w-full bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition text-left"
+                  onClick={() => logResponse('slight_reaction')}
+                  className="w-full flex items-center gap-4 p-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition"
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">{cue.icon}</span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-gray-900">{cue.name}</p>
-                        {cue.priority === 'high' && (
-                          <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Important</span>
-                        )}
-                      </div>
-                      <p className="text-gray-600 text-sm">
-                        {cue.status === 'mastered' && '🟢 Mastered'}
-                        {cue.status === 'stressful' && '🔴 Needs work'}
-                        {cue.status === 'working-on' && `🟡 ${cue.calmNeeded} more to master`}
-                        {cue.status === 'not-started' && 'Not started yet'}
-                      </p>
-                    </div>
-                    <span className="text-gray-400">→</span>
+                  <span className="text-3xl">🙂</span>
+                  <div className="text-left">
+                    <p className="font-semibold text-lg">Slight Reaction</p>
+                    <p className="text-sm opacity-80">Noticed but stayed calm</p>
                   </div>
                 </button>
-              ))}
+
+                <button
+                  onClick={() => logResponse('anxious')}
+                  className="w-full flex items-center gap-4 p-4 bg-red-500 hover:bg-red-600 text-white rounded-xl transition"
+                >
+                  <span className="text-3xl">😰</span>
+                  <div className="text-left">
+                    <p className="font-semibold text-lg">Anxious</p>
+                    <p className="text-sm opacity-80">Stressed, pacing, whining</p>
+                  </div>
+                </button>
+              </div>
             </div>
+
+            {/* Tip */}
+            <Card variant="filled" padding="md">
+              <p className="text-amber-800 text-sm">
+                <strong>💡 Tip:</strong> If {dog?.name} is anxious, that&apos;s valuable information! 
+                It means we need to practice this cue more. Try doing it more casually next time, 
+                or pair it with treats.
+              </p>
+            </Card>
+
           </div>
-        )}
+        </main>
+
+        <BottomNavSpacer />
+        <BottomNav />
       </div>
+    )
+  }
+
+  // Main Cue List View
+  return (
+    <div className="min-h-screen bg-[#FDFBF7]">
+      <PageHeader 
+        title="Departure Cues" 
+        subtitle={`Help ${dog?.name} stay calm`}
+        showBack
+        backHref="/dashboard"
+      />
+      
+      <main className="px-4 py-6">
+        <div className="max-w-lg mx-auto space-y-6">
+
+          {/* Explanation Card */}
+          <Card variant="filled" padding="md">
+            <p className="text-amber-800 text-sm">
+              <strong>What are departure cues?</strong> These are actions you do before leaving (like picking up keys). 
+              We&apos;ll practice them <em>without</em> leaving, so {dog?.name} learns they don&apos;t always mean goodbye.
+            </p>
+          </Card>
+
+          {/* Cue List */}
+          {cues.length > 0 ? (
+            <div>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                {dog?.name}&apos;s Cues ({cues.length})
+              </h2>
+              <CueList>
+                {cues.map(cue => (
+                  <CueCard
+                    key={cue.id}
+                    name={cue.name}
+                    calmCount={cue.calmCount}
+                    totalCount={cue.totalCount}
+                    onPractice={() => startPractice(cue)}
+                  />
+                ))}
+              </CueList>
+            </div>
+          ) : (
+            <Card variant="elevated" padding="lg" className="text-center">
+              <span className="text-5xl mb-4 block">🔑</span>
+              <h2 className="text-lg font-bold text-gray-900 mb-2">No cues yet</h2>
+              <p className="text-gray-600 mb-6">
+                Let&apos;s generate some personalized departure cues for {dog?.name}.
+              </p>
+              <Button onClick={generateCues} loading={generating} fullWidth>
+                <Sparkles className="w-5 h-5" />
+                Generate Cues for {dog?.name}
+              </Button>
+            </Card>
+          )}
+
+          {/* Add Custom Cue */}
+          {cues.length > 0 && (
+            <>
+              {showAddCue ? (
+                <Card variant="outlined" padding="md">
+                  <h3 className="font-semibold text-gray-900 mb-3">Add Custom Cue</h3>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCueName}
+                      onChange={(e) => setNewCueName(e.target.value)}
+                      placeholder="e.g., Start my car"
+                      className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:border-amber-500 focus:outline-none"
+                    />
+                    <Button onClick={addCustomCue} disabled={!newCueName.trim()}>
+                      <Check className="w-5 h-5" />
+                    </Button>
+                  </div>
+                  <button
+                    onClick={() => setShowAddCue(false)}
+                    className="text-gray-500 text-sm mt-2 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </Card>
+              ) : (
+                <div className="flex gap-3">
+                  <Button onClick={() => setShowAddCue(true)} variant="secondary" fullWidth>
+                    <Plus className="w-5 h-5" />
+                    Add Custom Cue
+                  </Button>
+                  <Button onClick={generateCues} variant="ghost" loading={generating}>
+                    <RotateCcw className="w-5 h-5" />
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+
+        </div>
+      </main>
+
+      <BottomNavSpacer />
+      <BottomNav />
     </div>
   )
 }

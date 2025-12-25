@@ -1,10 +1,14 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
 import { supabase } from '../supabase'
+import { useSelectedDog } from '../hooks/useSelectedDog'
+import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
+import { PageHeader } from '../components/layout/PageHeader'
+import { Card } from '../components/ui/Card'
+import { Upload, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Lightbulb, Video } from 'lucide-react'
 
-type Video = {
+type VideoType = {
   id: string
   created_at: string
   video_url: string
@@ -14,63 +18,48 @@ type Video = {
 }
 
 export default function VideosPage() {
-  const [dogName, setDogName] = useState('')
-  const [dogId, setDogId] = useState<string | null>(null)
-  const [videos, setVideos] = useState<Video[]>([])
+  const { dog, loading: dogLoading } = useSelectedDog()
+  
+  const [videos, setVideos] = useState<VideoType[]>([])
   const [uploading, setUploading] = useState(false)
   const [showTips, setShowTips] = useState(false)
   const [loading, setLoading] = useState(true)
   const [expandedVideo, setExpandedVideo] = useState<string | null>(null)
 
-  const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      window.location.href = '/login'
-      return
-    }
+  const loadVideos = useCallback(async () => {
+    if (!dog) return
 
-    const { data: dog } = await supabase
-      .from('dogs')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single()
+    const { data: videoData } = await supabase
+      .from('video_analyses')
+      .select('*')
+      .eq('dog_id', dog.id)
+      .order('created_at', { ascending: false })
 
-    if (dog) {
-      setDogName(dog.name)
-      setDogId(dog.id)
-
-      const { data: videoData } = await supabase
-        .from('video_analyses')
-        .select('*')
-        .eq('dog_id', dog.id)
-        .order('created_at', { ascending: false })
-
-      if (videoData) setVideos(videoData)
-    }
-
+    if (videoData) setVideos(videoData)
     setLoading(false)
-  }, [])
+  }, [dog])
 
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    if (dog) {
+      loadVideos()
+    }
+  }, [dog, loadVideos])
 
   useEffect(() => {
     const hasProcessing = videos.some(v => v.status === 'processing')
     
     if (hasProcessing) {
       const interval = setInterval(() => {
-        loadData()
+        loadVideos()
       }, 10000)
       
       return () => clearInterval(interval)
     }
-  }, [videos, loadData])
+  }, [videos, loadVideos])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !dogId) return
+    if (!file || !dog) return
 
     if (!file.type.startsWith('video/')) {
       alert('Please upload a video file')
@@ -85,7 +74,7 @@ export default function VideosPage() {
     setUploading(true)
 
     try {
-      const fileName = `${dogId}/${Date.now()}-${file.name}`
+      const fileName = `${dog.id}/${Date.now()}-${file.name}`
       const { error: uploadError } = await supabase.storage
         .from('videos')
         .upload(fileName, file)
@@ -99,7 +88,7 @@ export default function VideosPage() {
       const { data: analysisRecord, error: insertError } = await supabase
         .from('video_analyses')
         .insert({
-          dog_id: dogId,
+          dog_id: dog.id,
           video_url: publicUrl,
           status: 'processing'
         })
@@ -123,12 +112,12 @@ export default function VideosPage() {
         body: JSON.stringify({ 
           videoId: analysisRecord.id,
           videoUrl: publicUrl,
-          dogName 
+          dogName: dog.name
         })
       })
 
       if (response.ok) {
-        loadData()
+        loadVideos()
       } else {
         setVideos(prev => prev.map(v => 
           v.id === analysisRecord.id ? { ...v, status: 'failed' as const } : v
@@ -163,7 +152,6 @@ export default function VideosPage() {
     return ''
   }
 
-  // Calculate trend
   const getTrend = () => {
     const analyzed = videos.filter(v => v.status === 'analyzed' && v.analysis)
     if (analyzed.length < 2) return null
@@ -190,249 +178,267 @@ export default function VideosPage() {
 
   const trend = getTrend()
   const analyzedVideos = videos.filter(v => v.status === 'analyzed')
+  const isLoading = dogLoading || loading
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
-        <p className="text-amber-800">Loading...</p>
+        <div className="animate-pulse flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-purple-200" />
+          <div className="h-4 w-24 bg-purple-200 rounded" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] py-8 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-6">
-          <Link href="/dashboard" className="text-amber-600 hover:underline">← Back to Dashboard</Link>
-        </div>
+    <div className="min-h-screen bg-[#FDFBF7]">
+      <PageHeader 
+        title={`${dog?.name}'s Videos`} 
+        subtitle="Track behavior when alone"
+        showBack
+        backHref="/dashboard"
+      />
+      
+      <main className="px-4 py-6">
+        <div className="max-w-lg mx-auto space-y-4">
 
-        <div className="text-center mb-6">
-          <span className="text-4xl mb-2 block">🎥</span>
-          <h1 className="text-2xl font-bold text-amber-950 mb-1">{dogName}'s Video Diary</h1>
-          <p className="text-amber-800/70 text-sm">
-            Upload videos regularly to track {dogName}'s progress over time
-          </p>
-        </div>
-
-        {/* Trend Summary */}
-        {analyzedVideos.length >= 2 && (
-          <div className={`rounded-xl p-4 mb-6 ${
-            trend === 'improving' ? 'bg-green-50 border border-green-200' :
-            trend === 'worsening' ? 'bg-orange-50 border border-orange-200' :
-            'bg-blue-50 border border-blue-200'
-          }`}>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">
-                {trend === 'improving' ? '📈' : trend === 'worsening' ? '📉' : '➡️'}
-              </span>
-              <div>
-                <p className={`font-semibold ${
-                  trend === 'improving' ? 'text-green-800' :
-                  trend === 'worsening' ? 'text-orange-800' :
-                  'text-blue-800'
+          {/* Trend Summary */}
+          {analyzedVideos.length >= 2 && (
+            <Card 
+              variant="elevated" 
+              padding="md"
+              className={
+                trend === 'improving' ? 'bg-green-50 border-green-200' :
+                trend === 'worsening' ? 'bg-orange-50 border-orange-200' :
+                'bg-blue-50 border-blue-200'
+              }
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  trend === 'improving' ? 'bg-green-100' :
+                  trend === 'worsening' ? 'bg-orange-100' :
+                  'bg-blue-100'
                 }`}>
-                  {trend === 'improving' ? `${dogName} is improving!` :
-                   trend === 'worsening' ? `${dogName} needs more practice` :
-                   `${dogName} is holding steady`}
-                </p>
-                <p className={`text-sm ${
-                  trend === 'improving' ? 'text-green-700' :
-                  trend === 'worsening' ? 'text-orange-700' :
-                  'text-blue-700'
-                }`}>
-                  Based on {analyzedVideos.length} video analyses
-                </p>
+                  {trend === 'improving' ? <TrendingUp className="w-5 h-5 text-green-600" /> : 
+                   trend === 'worsening' ? <TrendingDown className="w-5 h-5 text-orange-600" /> : 
+                   <Minus className="w-5 h-5 text-blue-600" />}
+                </div>
+                <div>
+                  <p className={`font-semibold ${
+                    trend === 'improving' ? 'text-green-800' :
+                    trend === 'worsening' ? 'text-orange-800' :
+                    'text-blue-800'
+                  }`}>
+                    {trend === 'improving' ? `${dog?.name} is improving!` :
+                     trend === 'worsening' ? `${dog?.name} needs more practice` :
+                     `${dog?.name} is holding steady`}
+                  </p>
+                  <p className={`text-sm ${
+                    trend === 'improving' ? 'text-green-700' :
+                    trend === 'worsening' ? 'text-orange-700' :
+                    'text-blue-700'
+                  }`}>
+                    Based on {analyzedVideos.length} video analyses
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Upload Button */}
-        <div className="bg-white rounded-xl border-2 border-dashed border-amber-300 p-6 text-center mb-4">
-          {uploading ? (
-            <div>
-              <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-              <p className="text-amber-800 font-medium">Analyzing {dogName}'s behavior...</p>
-              <p className="text-amber-600 text-sm">This takes about 30 seconds</p>
-            </div>
-          ) : (
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleUpload}
-                className="hidden"
-              />
-              <div>
-                <span className="text-3xl mb-2 block">📤</span>
-                <p className="text-amber-950 font-semibold mb-1">Upload New Video</p>
-                <p className="text-amber-700/70 text-sm">MP4, MOV, or WebM • Max 100MB</p>
-              </div>
-            </label>
+            </Card>
           )}
-        </div>
 
-        {/* Tips toggle */}
-        <button 
-          onClick={() => setShowTips(!showTips)}
-          className="text-amber-600 hover:underline text-sm mb-4 flex items-center gap-1"
-        >
-          {showTips ? '▼' : '▶'} Recording tips
-        </button>
+          {/* Upload Button */}
+          <Card variant="outlined" padding="lg" className="border-2 border-dashed border-purple-300">
+            {uploading ? (
+              <div className="text-center">
+                <div className="animate-spin w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                <p className="text-purple-800 font-medium">Analyzing {dog?.name}&apos;s behavior...</p>
+                <p className="text-purple-600 text-sm">This takes about 30 seconds</p>
+              </div>
+            ) : (
+              <label className="cursor-pointer block text-center">
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleUpload}
+                  className="hidden"
+                />
+                <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-3">
+                  <Upload className="w-7 h-7 text-purple-600" />
+                </div>
+                <p className="text-gray-900 font-semibold mb-1">Upload New Video</p>
+                <p className="text-gray-500 text-sm">MP4, MOV, or WebM • Max 100MB</p>
+              </label>
+            )}
+          </Card>
 
-        {showTips && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-            <div className="space-y-2 text-blue-800 text-sm">
-              <p><strong>📹 Best practices:</strong></p>
-              <ul className="space-y-1 ml-4">
-                <li>• Record 5-15 minutes after you leave</li>
-                <li>• Position camera to see {dogName}'s usual spots</li>
-                <li>• Include audio if possible</li>
-                <li>• Upload weekly to track progress</li>
-              </ul>
-            </div>
-          </div>
-        )}
+          {/* Tips toggle */}
+          <button 
+            onClick={() => setShowTips(!showTips)}
+            className="flex items-center gap-2 text-purple-600 hover:text-purple-700 text-sm font-medium"
+          >
+            <Lightbulb className="w-4 h-4" />
+            Recording tips
+            {showTips ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
 
-        {/* Video Timeline */}
-        {videos.length > 0 ? (
-          <div>
-            <h2 className="font-semibold text-amber-950 mb-4">
-              Video History ({videos.length} {videos.length === 1 ? 'video' : 'videos'})
-            </h2>
-            <div className="space-y-3">
-              {videos.map((video) => {
-                const anxiety = video.analysis ? getAnxietyLevel(video.analysis) : null
-                const vibeCheck = video.analysis ? getVibeCheck(video.analysis) : ''
-                const isExpanded = expandedVideo === video.id
+          {showTips && (
+            <Card variant="elevated" padding="md" className="bg-blue-50 border-blue-100">
+              <div className="space-y-2 text-blue-800 text-sm">
+                <p className="font-semibold">📹 Best practices:</p>
+                <ul className="space-y-1 ml-4">
+                  <li>• Record 5-15 minutes after you leave</li>
+                  <li>• Position camera to see {dog?.name}&apos;s usual spots</li>
+                  <li>• Include audio if possible</li>
+                  <li>• Upload weekly to track progress</li>
+                </ul>
+              </div>
+            </Card>
+          )}
 
-                return (
-                  <div 
-                    key={video.id} 
-                    className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden"
-                  >
-                    <div 
-                      className="p-4 cursor-pointer hover:bg-amber-50/50 transition"
-                      onClick={() => setExpandedVideo(isExpanded ? null : video.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${
-                            video.status === 'analyzed' && anxiety
-                              ? anxiety.color === 'green' ? 'bg-green-100'
-                                : anxiety.color === 'yellow' ? 'bg-yellow-100'
-                                : anxiety.color === 'orange' ? 'bg-orange-100'
-                                : anxiety.color === 'red' ? 'bg-red-100'
-                                : 'bg-gray-100'
-                              : video.status === 'processing' ? 'bg-amber-100'
-                              : 'bg-red-100'
-                          }`}>
-                            {video.status === 'analyzed' && anxiety ? anxiety.emoji :
-                             video.status === 'processing' ? '⏳' : '❌'}
-                          </div>
-                          <div>
-                            <p className="font-medium text-amber-950">
-                              {new Date(video.created_at).toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric'
-                              })}
-                            </p>
-                            <p className="text-sm text-amber-700/70">
-                              {video.status === 'analyzed' && anxiety 
-                                ? `${anxiety.level} anxiety`
-                                : video.status === 'processing' 
-                                ? 'Analyzing...'
-                                : 'Analysis failed'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-amber-400">
-                          {isExpanded ? '▲' : '▼'}
-                        </span>
-                      </div>
+          {/* Video Timeline */}
+          {videos.length > 0 ? (
+            <div>
+              <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Video className="w-5 h-5 text-purple-500" />
+                Video History ({videos.length})
+              </h2>
+              <div className="space-y-3">
+                {videos.map((video) => {
+                  const anxiety = video.analysis ? getAnxietyLevel(video.analysis) : null
+                  const vibeCheck = video.analysis ? getVibeCheck(video.analysis) : ''
+                  const isExpanded = expandedVideo === video.id
 
-                      {/* Vibe check preview */}
-                      {video.status === 'analyzed' && vibeCheck && !isExpanded && (
-                        <p className="text-sm text-amber-700 mt-2 italic line-clamp-1">
-                          "{vibeCheck}"
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Expanded analysis */}
-                    {isExpanded && video.status === 'analyzed' && video.analysis && (
-                      <div className="px-4 pb-4 border-t border-amber-100">
-                        {video.triggers_detected && video.triggers_detected.length > 0 && (
-                          <div className="mt-3 mb-3">
-                            <p className="text-xs font-medium text-amber-700 mb-2">Triggers:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {video.triggers_detected.map((trigger, i) => (
-                                <span key={i} className="bg-red-50 text-red-700 text-xs px-2 py-1 rounded-full">
-                                  {trigger}
-                                </span>
-                              ))}
+                  return (
+                    <Card key={video.id} variant="elevated" padding="none" className="overflow-hidden">
+                      <button
+                        className="w-full p-4 text-left hover:bg-gray-50 transition"
+                        onClick={() => setExpandedVideo(isExpanded ? null : video.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${
+                              video.status === 'analyzed' && anxiety
+                                ? anxiety.color === 'green' ? 'bg-green-100'
+                                  : anxiety.color === 'yellow' ? 'bg-yellow-100'
+                                  : anxiety.color === 'orange' ? 'bg-orange-100'
+                                  : anxiety.color === 'red' ? 'bg-red-100'
+                                  : 'bg-gray-100'
+                                : video.status === 'processing' ? 'bg-purple-100'
+                                : 'bg-red-100'
+                            }`}>
+                              {video.status === 'analyzed' && anxiety ? anxiety.emoji :
+                               video.status === 'processing' ? '⏳' : '❌'}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {new Date(video.created_at).toLocaleDateString('en-US', {
+                                  weekday: 'short',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {video.status === 'analyzed' && anxiety 
+                                  ? `${anxiety.level} anxiety`
+                                  : video.status === 'processing' 
+                                  ? 'Analyzing...'
+                                  : 'Analysis failed'}
+                              </p>
                             </div>
                           </div>
-                        )}
-                        <div className="bg-amber-50 rounded-lg p-3 mt-3">
-                          <p className="text-amber-900 text-sm whitespace-pre-line">{video.analysis}</p>
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          )}
                         </div>
-                      </div>
-                    )}
 
-                    {isExpanded && video.status === 'processing' && (
-                      <div className="px-4 pb-4">
-                        <div className="bg-amber-50 rounded-lg p-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="animate-spin w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full"></div>
-                            <p className="text-amber-700 text-sm">Analyzing {dogName}'s behavior...</p>
+                        {/* Vibe check preview */}
+                        {video.status === 'analyzed' && vibeCheck && !isExpanded && (
+                          <p className="text-sm text-gray-600 mt-2 italic line-clamp-1">
+                            &quot;{vibeCheck}&quot;
+                          </p>
+                        )}
+                      </button>
+
+                      {/* Expanded analysis */}
+                      {isExpanded && video.status === 'analyzed' && video.analysis && (
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                          {video.triggers_detected && video.triggers_detected.length > 0 && (
+                            <div className="mt-3 mb-3">
+                              <p className="text-xs font-medium text-gray-700 mb-2">Triggers detected:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {video.triggers_detected.map((trigger, i) => (
+                                  <span key={i} className="bg-red-50 text-red-700 text-xs px-3 py-1 rounded-full border border-red-100">
+                                    {trigger}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div className="bg-purple-50 rounded-xl p-4 mt-3">
+                            <p className="text-purple-900 text-sm whitespace-pre-line">{video.analysis}</p>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {isExpanded && video.status === 'failed' && (
-                      <div className="px-4 pb-4">
-                        <div className="bg-red-50 rounded-lg p-3 text-center">
-                          <p className="text-red-700 text-sm">Analysis failed. Try uploading again.</p>
+                      {isExpanded && video.status === 'processing' && (
+                        <div className="px-4 pb-4">
+                          <div className="bg-purple-50 rounded-xl p-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="animate-spin w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+                              <p className="text-purple-700 text-sm">Analyzing {dog?.name}&apos;s behavior...</p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                      )}
+
+                      {isExpanded && video.status === 'failed' && (
+                        <div className="px-4 pb-4">
+                          <div className="bg-red-50 rounded-xl p-4 text-center">
+                            <p className="text-red-700 text-sm">Analysis failed. Try uploading again.</p>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 bg-white rounded-xl border border-amber-100">
-            <span className="text-4xl mb-3 block">🎬</span>
-            <p className="text-amber-950 font-medium mb-1">No videos yet</p>
-            <p className="text-amber-700/70 text-sm">
-              Upload your first video to see how {dogName} does when alone!
-            </p>
-          </div>
-        )}
+          ) : (
+            <Card variant="elevated" padding="lg" className="text-center">
+              <span className="text-5xl mb-4 block">🎬</span>
+              <h2 className="text-lg font-bold text-gray-900 mb-2">No videos yet</h2>
+              <p className="text-gray-600">
+                Upload your first video to see how {dog?.name} does when alone!
+              </p>
+            </Card>
+          )}
 
-        {/* Encouragement */}
-        {videos.length > 0 && videos.length < 4 && (
-          <div className="mt-6 bg-amber-50 rounded-xl p-4 text-center">
-            <p className="text-amber-800 text-sm">
-              <strong>💡 Pro tip:</strong> Upload videos weekly to track {dogName}'s progress. 
-              The more data, the better insights!
-            </p>
-          </div>
-        )}
+          {/* Encouragement */}
+          {videos.length > 0 && videos.length < 4 && (
+            <Card variant="filled" padding="md" className="text-center">
+              <p className="text-amber-800 text-sm">
+                <strong>💡 Pro tip:</strong> Upload videos weekly to track {dog?.name}&apos;s progress. 
+                The more data, the better insights!
+              </p>
+            </Card>
+          )}
 
-        {videos.length >= 4 && (
-          <div className="mt-6 bg-green-50 rounded-xl p-4 text-center">
-            <p className="text-green-800 text-sm">
-              <strong>🌟 Great job!</strong> You've uploaded {videos.length} videos. 
-              Keep it up to track {dogName}'s long-term progress!
-            </p>
-          </div>
-        )}
-      </div>
+          {videos.length >= 4 && (
+            <Card variant="elevated" padding="md" className="text-center bg-green-50 border-green-100">
+              <p className="text-green-800 text-sm">
+                <strong>🌟 Great job!</strong> You&apos;ve uploaded {videos.length} videos. 
+                Keep it up to track {dog?.name}&apos;s long-term progress!
+              </p>
+            </Card>
+          )}
+
+        </div>
+      </main>
+
+      <BottomNavSpacer />
+      <BottomNav />
     </div>
   )
 }
