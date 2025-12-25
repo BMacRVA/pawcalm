@@ -13,7 +13,7 @@ export interface SessionCardProps {
   stepsCompleted?: number;
   stepsTotal?: number;
   dogResponse: 'great' | 'okay' | 'struggled';
-  ownerFeeling?: 'confident' | 'neutral' | 'anxious';
+  ownerFeeling?: string;
   notes?: string;
   type?: 'absence' | 'cue';
 }
