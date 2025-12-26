@@ -58,6 +58,8 @@ export default function DeparturePracticePage() {
   const [consecutiveCalm, setConsecutiveCalm] = useState(0)
   const [consecutiveAnxious, setConsecutiveAnxious] = useState(0)
   const [supportMessage, setSupportMessage] = useState('')
+  const [updatedCalmCount, setUpdatedCalmCount] = useState(0)
+  const [updatedTotalCount, setUpdatedTotalCount] = useState(0)
 
   const loadCues = useCallback(async () => {
     if (!dog) return
@@ -186,8 +188,13 @@ export default function DeparturePracticePage() {
     if (!dog || !selectedCue) return
 
     setLastResponse(response)
-    setShowResult(true)
     setSessionSequence(prev => prev + 1)
+
+    // Calculate new counts immediately for display
+    const newCalmCount = selectedCue.calmCount + (response === 'calm' ? 1 : 0)
+    const newTotalCount = selectedCue.totalCount + 1
+    setUpdatedCalmCount(newCalmCount)
+    setUpdatedTotalCount(newTotalCount)
 
     // Update consecutive counters
     if (response === 'calm') {
@@ -238,8 +245,6 @@ export default function DeparturePracticePage() {
     })
 
     // Update cue statistics
-    const newCalmCount = selectedCue.calmCount + (response === 'calm' ? 1 : 0)
-    const newTotalCount = selectedCue.totalCount + 1
     const calmRate = newTotalCount > 0 ? newCalmCount / newTotalCount : 0
     const justMastered = newCalmCount >= 5 && calmRate >= 0.7
 
@@ -270,6 +275,10 @@ export default function DeparturePracticePage() {
       cue_id: selectedCue.id,
     })
 
+    // Show result screen
+    setShowResult(true)
+
+    // Reload cues in background
     loadCues()
   }
 
@@ -306,11 +315,9 @@ export default function DeparturePracticePage() {
 
   // Practice Mode - Show Result
   if (practiceMode && showResult && selectedCue) {
-    const newCalmCount = selectedCue.calmCount + (lastResponse === 'calm' ? 1 : 0)
-    const newTotalCount = selectedCue.totalCount + 1
-    const calmRate = newTotalCount > 0 ? newCalmCount / newTotalCount : 0
-    const justMastered = newCalmCount >= 5 && calmRate >= 0.7 && selectedCue.calmCount < 5
-    const cuesRemaining = 5 - newCalmCount
+    const calmRate = updatedTotalCount > 0 ? updatedCalmCount / updatedTotalCount : 0
+    const justMastered = updatedCalmCount >= 5 && calmRate >= 0.7 && selectedCue.calmCount < 5
+    const cuesRemaining = Math.max(0, 5 - updatedCalmCount)
 
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
@@ -335,9 +342,9 @@ export default function DeparturePracticePage() {
 
               <Card variant="filled" padding="md" className="mb-6 text-left">
                 <p className="text-amber-800 text-sm">
-                  <strong>📊 {selectedCue.name}:</strong> {newCalmCount} calm / {newTotalCount} total ({Math.round(calmRate * 100)}%)
+                  <strong>📊 {selectedCue.name}:</strong> {updatedCalmCount} calm / {updatedTotalCount} total ({Math.round(calmRate * 100)}%)
                 </p>
-                {newCalmCount >= 5 && calmRate >= 0.7 ? (
+                {updatedCalmCount >= 5 && calmRate >= 0.7 ? (
                   <p className="text-green-700 text-sm mt-1">✓ Mastered!</p>
                 ) : (
                   <p className="text-amber-700 text-sm mt-1">
