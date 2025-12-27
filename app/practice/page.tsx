@@ -195,36 +195,36 @@ function PracticeContent() {
   }, [dog, loadData])
 
   const generateCues = async () => {
-    if (!dog) return
-    setGenerating(true)
+  if (!dog) return
+  setGenerating(true)
 
-    try {
-      const response = await fetch('/api/generate-cues-list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dog }),
+  try {
+    // Default cues - simple and reliable
+    const defaultCues = [
+      'Pick up keys',
+      'Put on shoes', 
+      'Touch door handle',
+      'Put on jacket',
+      'Pick up bag',
+    ]
+
+    for (const name of defaultCues) {
+      await supabase.from('custom_cues').insert({
+        dog_id: dog.id,
+        name: name,
+        instructions: 'Do this action calmly while your dog watches',
+        success_looks_like: 'Your dog stays relaxed',
+        if_struggling: 'Try doing it more slowly or from further away',
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        
-        if (data.cues && data.cues.length > 0) {
-          const cuesToInsert = data.cues.map((cue: any) => ({
-            dog_id: dog.id,
-            name: cue.name,
-            is_ai_generated: true,
-          }))
-
-          await supabase.from('custom_cues').insert(cuesToInsert)
-          await loadData()
-        }
-      }
-    } catch (error) {
-      console.error('Error generating cues:', error)
     }
 
-    setGenerating(false)
+    await loadData()
+  } catch (error) {
+    console.error('Error creating cues:', error)
   }
+
+  setGenerating(false)
+}
 
   const logResponse = async (response: Response) => {
     if (!dog || !currentCue) return
