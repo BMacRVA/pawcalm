@@ -194,33 +194,70 @@ function PracticeContent() {
     }
   }, [dog, loadData])
 
-  const generateCues = async () => {
+const generateCues = async () => {
   if (!dog) return
   setGenerating(true)
 
   try {
-    // Default cues - simple and reliable
-    const defaultCues = [
-      'Pick up keys',
-      'Put on shoes', 
-      'Touch door handle',
-      'Put on jacket',
-      'Pick up bag',
-    ]
+    const response = await fetch('/api/generate-cues-list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dog }),
+    })
 
-    for (const name of defaultCues) {
-      await supabase.from('custom_cues').insert({
+    if (response.ok) {
+      const data = await response.json()
+      
+      if (data.cues && data.cues.length > 0) {
+        const cuesToInsert = data.cues.map((cue: any) => ({
+          dog_id: dog.id,
+          name: cue.name,
+          icon: cue.icon || '🔑',
+          instructions: cue.instructions,
+          success_looks_like: cue.success_looks_like,
+          if_struggling: cue.if_struggling,
+          priority: cue.priority || 'medium',
+          reason: cue.reason || '',
+          is_ai_generated: true,
+          calm_count: 0,
+          total_practices: 0,
+        }))
+
+        const { error } = await supabase.from('custom_cues').insert(cuesToInsert)
+        
+        if (error) {
+          console.error('Failed to insert cues:', error)
+        }
+        
+        await loadData()
+      }
+    } else {
+      // Fallback to default cues if API fails
+      const defaultCues = [
+        { name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold for 2 seconds, then put them down. Repeat 10 times.', success_looks_like: 'Your dog stays relaxed — no pacing or whining.', if_struggling: 'Just touch the keys without picking them up.' },
+        { name: 'Put on shoes', icon: '👟', instructions: 'Put on your shoes, walk around briefly, then take them off. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t get up.', if_struggling: 'Just touch your shoes, then sit back down.' },
+        { name: 'Touch door handle', icon: '🚪', instructions: 'Walk to the door, touch the handle, then walk away. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t rush to the door.', if_struggling: 'Walk toward the door but stop halfway.' },
+        { name: 'Put on jacket', icon: '🧥', instructions: 'Put on your jacket, wait 5 seconds, then take it off. Repeat 10 times.', success_looks_like: 'Your dog stays settled and doesn\'t get anxious.', if_struggling: 'Just pick up the jacket without putting it on.' },
+        { name: 'Pick up bag', icon: '👜', instructions: 'Pick up your bag, carry it for a moment, then put it down. Repeat 10 times.', success_looks_like: 'Your dog remains calm and doesn\'t follow you.', if_struggling: 'Just touch the bag without picking it up.' },
+      ]
+
+      const cuesToInsert = defaultCues.map(cue => ({
         dog_id: dog.id,
-        name: name,
-        instructions: 'Do this action calmly while your dog watches',
-        success_looks_like: 'Your dog stays relaxed',
-        if_struggling: 'Try doing it more slowly or from further away',
-      })
-    }
+        name: cue.name,
+        icon: cue.icon,
+        instructions: cue.instructions,
+        success_looks_like: cue.success_looks_like,
+        if_struggling: cue.if_struggling,
+        is_ai_generated: false,
+        calm_count: 0,
+        total_practices: 0,
+      }))
 
-    await loadData()
+      await supabase.from('custom_cues').insert(cuesToInsert)
+      await loadData()
+    }
   } catch (error) {
-    console.error('Error creating cues:', error)
+    console.error('Error generating cues:', error)
   }
 
   setGenerating(false)
