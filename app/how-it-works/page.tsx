@@ -30,26 +30,39 @@ export default function HowItWorksPage() {
           A simple, science-backed approach to helping your dog overcome separation anxiety
         </p>
 
+        {/* The Science */}
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-12">
+          <h2 className="text-lg font-semibold text-blue-900 mb-3">💡 The Science</h2>
+          <p className="text-blue-800/80 mb-3">
+            Dogs with separation anxiety often react to <strong>departure cues</strong> — the things you do before leaving, 
+            like picking up keys, putting on shoes, or touching the door handle.
+          </p>
+          <p className="text-blue-800/80">
+            By practicing these cues <strong>without actually leaving</strong>, your dog learns they don&apos;t always mean 
+            goodbye. This is called <strong>desensitization</strong>, and it&apos;s the gold standard in treating separation anxiety.
+          </p>
+        </div>
+
         {/* 3 Steps */}
         <div className="space-y-8 mb-16">
           {[
             {
               step: '1',
-              title: 'Tell us about your dog',
-              desc: 'Share your dog\'s breed, age, and what triggers their anxiety. Does your dog panic when you grab your keys? Bark when you put on shoes? We tailor everything to their specific triggers.',
+              title: 'Add your dog',
+              desc: 'Just enter your dog\'s name to get started. We\'ll create a personalized set of departure cues based on the most common anxiety triggers — keys, shoes, door, jacket, and more.',
               icon: '🐕'
             },
             {
               step: '2',
-              title: 'Get daily 5-minute missions',
-              desc: 'Our AI creates personalized exercises based on proven desensitization techniques. Each mission builds on the last, gradually increasing difficulty as your dog improves.',
-              icon: '🎯'
+              title: 'Practice cues daily',
+              desc: 'Each day, spend 5 minutes practicing 3-5 cues. Pick up your keys and put them down. Touch the door handle. Put on your shoes — then sit back down. Log whether your dog stayed calm, noticed, or got anxious.',
+              icon: '🔑'
             },
             {
               step: '3',
-              title: 'Track progress & adjust',
-              desc: 'Log each session with a simple mood check. We track what\'s working and adjust your missions automatically. Watch your dog\'s anxiety score improve over time.',
-              icon: '📈'
+              title: 'Chat with your AI coach',
+              desc: 'Your personal coach knows your dog\'s entire history — every practice, every reaction, every pattern. Ask questions, report struggles, celebrate wins. Get specific, actionable guidance tailored to your dog.',
+              icon: '💬'
             }
           ].map((item) => (
             <div key={item.step} className="flex gap-6 items-start bg-white rounded-2xl p-6 border border-amber-100">
@@ -69,6 +82,37 @@ export default function HowItWorksPage() {
           ))}
         </div>
 
+        {/* Progression */}
+        <h2 className="text-2xl font-bold text-amber-950 text-center mb-8">
+          Your journey
+        </h2>
+        <div className="grid md:grid-cols-2 gap-6 mb-16">
+          <div className="bg-white rounded-2xl p-6 border border-amber-100">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">🎯</span>
+              <h3 className="font-semibold text-amber-950">Level 1: Departure Cues</h3>
+            </div>
+            <p className="text-amber-800/70 text-sm mb-3">
+              Practice cues without leaving. Master 5+ calm responses on each cue.
+            </p>
+            <div className="text-xs text-amber-600 font-medium">
+              ✓ Keys • Shoes • Door • Jacket • Bag
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 border border-amber-100">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">🚪</span>
+              <h3 className="font-semibold text-amber-950">Level 2: Absence Training</h3>
+            </div>
+            <p className="text-amber-800/70 text-sm mb-3">
+              Start with 30-second departures. Gradually increase to minutes, then hours.
+            </p>
+            <div className="text-xs text-gray-400 font-medium">
+              🔒 Unlocks after mastering 3 cues
+            </div>
+          </div>
+        </div>
+
         {/* Features */}
         <h2 className="text-2xl font-bold text-amber-950 text-center mb-8">
           What you get
@@ -76,19 +120,14 @@ export default function HowItWorksPage() {
         <div className="grid md:grid-cols-3 gap-6 mb-16">
           {[
             {
-              icon: '🎯',
-              title: 'Personalized missions',
-              desc: 'AI creates exercises for your dog\'s specific triggers and your schedule'
+              icon: '🧠',
+              title: 'AI Coach',
+              desc: 'A personal trainer who knows your dog\'s history and gives specific advice'
             },
             {
               icon: '📊',
               title: 'Progress tracking',
-              desc: 'Log sessions, see patterns, and watch anxiety scores improve'
-            },
-            {
-              icon: '🎬',
-              title: 'Trainer videos',
-              desc: 'Watch exactly how to do each technique from certified behaviorists'
+              desc: 'See calm rates improve, track streaks, and celebrate mastered cues'
             },
             {
               icon: '⏱️',
@@ -96,14 +135,19 @@ export default function HowItWorksPage() {
               desc: 'Short, consistent practice beats long, sporadic sessions'
             },
             {
-              icon: '🧠',
+              icon: '🎯',
+              title: 'Adaptive goals',
+              desc: 'Daily goals adjust based on your streak and consistency'
+            },
+            {
+              icon: '🔬',
               title: 'Science-backed',
               desc: 'Based on proven desensitization and counter-conditioning techniques'
             },
             {
-              icon: '💬',
-              title: 'Daily check-ins',
-              desc: 'Quick mood logs help us adjust your plan automatically'
+              icon: '🐕',
+              title: 'Multi-dog support',
+              desc: 'Track progress for multiple dogs, each with their own cues'
             }
           ].map((feature, i) => (
             <div key={i} className="bg-white rounded-2xl p-6 border border-amber-100 text-center">
@@ -114,10 +158,32 @@ export default function HowItWorksPage() {
           ))}
         </div>
 
+        {/* Timeline */}
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-16">
+          <h2 className="text-lg font-semibold text-amber-900 mb-4">📅 What to expect</h2>
+          <div className="space-y-3 text-amber-800/80">
+            <div className="flex gap-3">
+              <span className="font-semibold text-amber-700 w-24 flex-shrink-0">Week 1-2:</span>
+              <span>Build the habit. Practice cues daily, even if your dog reacts.</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="font-semibold text-amber-700 w-24 flex-shrink-0">Week 3-4:</span>
+              <span>Most dogs show noticeable improvement. Cues start getting mastered.</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="font-semibold text-amber-700 w-24 flex-shrink-0">Week 5+:</span>
+              <span>Begin absence training. Short departures, then gradually longer.</span>
+            </div>
+          </div>
+          <p className="text-amber-700 text-sm mt-4 italic">
+            Setbacks are normal — your AI coach will help you work through them.
+          </p>
+        </div>
+
         {/* CTA */}
         <div className="text-center bg-amber-950 rounded-2xl p-8">
           <h2 className="text-2xl font-bold text-white mb-2">Ready to help your dog?</h2>
-          <p className="text-amber-300 mb-6">Start your first mission in under 2 minutes</p>
+          <p className="text-amber-300 mb-6">Start practicing in under 2 minutes</p>
           <Link
             href="/signup"
             className="inline-block bg-amber-600 hover:bg-amber-500 text-white px-8 py-4 rounded-xl font-semibold transition-all hover:scale-105"
@@ -137,7 +203,6 @@ export default function HowItWorksPage() {
             <Link href="/faq" className="hover:text-amber-900">FAQ</Link>
             <Link href="/terms" className="hover:text-amber-900">Terms</Link>
             <Link href="/privacy" className="hover:text-amber-900">Privacy</Link>
-            <Link href="/disclaimer" className="hover:text-amber-900">Disclaimer</Link>
           </div>
         </div>
       </footer>

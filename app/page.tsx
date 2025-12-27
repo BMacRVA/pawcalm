@@ -3,13 +3,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from './supabase';
-import ExitIntent from './components/exitintent';
 
 export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState({ dogsEnrolled: 0 });
-  const [showMobileDemo, setShowMobileDemo] = useState(false);
 
   useEffect(() => {
     const handleAuthRedirect = async () => {
@@ -67,22 +65,31 @@ export default function LandingPage() {
             {/* Left: Hero */}
             <div className="lg:flex-1 text-center lg:text-left">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-950 tracking-tight leading-tight mb-4">
-                Calm your anxious dog
+                Help your anxious dog
                 <span className="block text-amber-600">in 5 min/day</span>
               </h1>
               
               <p className="text-base sm:text-lg text-amber-800/70 mb-6 max-w-md mx-auto lg:mx-0">
-                AI-powered daily missions personalized for your dog's anxiety triggers.
+                Practice simple cues. Track progress. Get guidance from an AI coach who knows your dog.
               </p>
 
-              {/* What to expect */}
+              {/* How it works */}
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left max-w-md mx-auto lg:mx-0">
-                <p className="text-sm font-semibold text-amber-900 mb-2">What to expect:</p>
-                <ul className="text-sm text-amber-800/80 space-y-1">
-                  <li>• First 2 weeks: Building foundation & habits</li>
-                  <li>• Weeks 3-4: Most dogs show noticeable improvement</li>
-                  <li>• Setbacks are normal — we adjust automatically</li>
-                </ul>
+                <p className="text-sm font-semibold text-amber-900 mb-3">How it works:</p>
+                <div className="space-y-2 text-sm text-amber-800/80">
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-600">1.</span>
+                    <span>Practice departure cues (keys, shoes, door) without leaving</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-600">2.</span>
+                    <span>Log how your dog reacts — calm, noticed, or anxious</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-600">3.</span>
+                    <span>Chat with your AI coach for personalized guidance</span>
+                  </div>
+                </div>
               </div>
 
               <form onSubmit={handleQuickSignup} className="mb-4 max-w-md mx-auto lg:mx-0">
@@ -121,109 +128,56 @@ export default function LandingPage() {
                   <span><strong>{stats.dogsEnrolled}</strong> dog{stats.dogsEnrolled !== 1 && 's'} enrolled</span>
                 </div>
               )}
-
-              {/* Mobile: Sample mission teaser */}
-              <div className="lg:hidden mt-6">
-                <button
-                  onClick={() => setShowMobileDemo(!showMobileDemo)}
-                  className="w-full max-w-md mx-auto flex items-center justify-between bg-white border border-amber-200 rounded-xl p-4 text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-amber-700 rounded-lg flex items-center justify-center text-white text-lg">
-                      📋
-                    </div>
-                    <div>
-                      <p className="font-semibold text-amber-950">See a sample mission</p>
-                      <p className="text-sm text-amber-700/70">What you'll get each day</p>
-                    </div>
-                  </div>
-                  <span className={`text-amber-600 transition-transform ${showMobileDemo ? 'rotate-180' : ''}`}>
-                    ▼
-                  </span>
-                </button>
-
-                {/* Expandable demo */}
-                {showMobileDemo && (
-                  <div className="mt-3 max-w-md mx-auto bg-white rounded-xl border border-amber-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-3 text-white">
-                      <p className="text-amber-200 text-xs">Sample Mission • Day 3</p>
-                      <p className="font-bold">Departure Desensitization</p>
-                    </div>
-                    <div className="p-3 space-y-2">
-                      <div className="flex gap-2 p-2 bg-amber-50 rounded-lg">
-                        <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">1</span>
-                        <p className="text-amber-950 text-sm">Pick up keys, put them down (3x)</p>
-                      </div>
-                      <div className="flex gap-2 p-2 bg-gray-100 rounded-lg opacity-60">
-                        <span className="w-5 h-5 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold">2</span>
-                        <p className="text-gray-600 text-sm">Walk toward the door...</p>
-                      </div>
-                      <div className="flex gap-2 p-2 bg-gray-100 rounded-lg opacity-40">
-                        <span className="w-5 h-5 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold">3</span>
-                        <p className="text-gray-600 text-sm">Full departure practice...</p>
-                      </div>
-                    </div>
-                    <Link href="/signup" className="block p-3 bg-amber-50 border-t border-amber-100 text-center">
-                      <span className="text-amber-700 font-semibold text-sm">Get your personalized plan →</span>
-                    </Link>
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* Right: Demo Card - Desktop only */}
+            {/* Right: App Preview */}
             <div className="hidden lg:block lg:flex-1 max-w-md">
-              <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100">
+              {/* Practice Preview */}
+              <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100 mb-4">
                 <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-4 text-white">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-amber-200 text-xs font-medium">Sample Mission</span>
-                    <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">Day 3</span>
-                  </div>
-                  <h3 className="text-lg font-bold">Departure Desensitization</h3>
+                  <p className="text-amber-200 text-xs font-medium">Daily Practice</p>
+                  <h3 className="text-lg font-bold">Quick Cue Training</h3>
                 </div>
 
-                <div className="p-4 space-y-2">
-                  <div className="flex gap-3 p-3 bg-amber-50 rounded-xl">
-                    <div className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
-                    <div>
-                      <p className="text-amber-950 text-sm font-medium">Pick up keys, put them down</p>
-                      <p className="text-amber-700/70 text-xs">Repeat 3x without eye contact</p>
-                    </div>
+                <div className="p-4">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">🔑</span>
+                    <p className="font-semibold text-gray-900 mt-2">Pick up your keys</p>
+                    <p className="text-sm text-gray-500">How did your dog react?</p>
                   </div>
 
-                  <Link href="/signup" className="block relative group">
-                    <div className="flex gap-3 p-3 bg-gray-100 rounded-xl blur-[2px]">
-                      <div className="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
-                      <div>
-                        <p className="text-gray-950 text-sm font-medium">Walk toward the door</p>
-                        <p className="text-gray-700/70 text-xs">Build gradually</p>
-                      </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-200">
+                      <span className="text-2xl">😎</span>
+                      <span className="font-medium text-green-800">Calm</span>
                     </div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="bg-amber-950 text-white text-xs px-3 py-1.5 rounded-full group-hover:bg-amber-800 transition-colors">
-                        🔒 Sign up to unlock
-                      </span>
+                    <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                      <span className="text-2xl">🙂</span>
+                      <span className="font-medium text-amber-800">Noticed</span>
                     </div>
-                  </Link>
-
-                  <div className="flex gap-3 p-3 bg-gray-100 rounded-xl blur-[2px] opacity-60">
-                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
-                    <div>
-                      <p className="text-gray-950 text-sm font-medium">Full departure practice</p>
-                      <p className="text-gray-700/70 text-xs">Reward calm behavior</p>
+                    <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-200">
+                      <span className="text-2xl">😰</span>
+                      <span className="font-medium text-red-800">Anxious</span>
                     </div>
                   </div>
                 </div>
-
-                <Link href="/signup" className="block p-3 bg-amber-50 border-t border-amber-100 text-center hover:bg-amber-100 transition-colors">
-                  <span className="text-amber-700 font-semibold text-sm">Get your personalized plan →</span>
-                </Link>
               </div>
 
-              <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-                <p className="text-green-800 text-sm">
-                  📈 <strong>Track progress</strong> — see your dog's anxiety score improve over time
-                </p>
+              {/* Coach Preview */}
+              <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100">
+                <div className="p-4 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <span>💬</span>
+                    <span className="font-semibold text-gray-900">AI Coach</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="bg-gray-100 rounded-2xl rounded-bl-md p-3 max-w-[85%]">
+                    <p className="text-sm text-gray-700">
+                      Great progress! Your dog stayed calm 4 times today. Try the shoe cue next — it&apos;s often easier after keys. 🎉
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -242,8 +196,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-
-      <ExitIntent />
     </div>
   );
 }
