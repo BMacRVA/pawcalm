@@ -6,11 +6,12 @@ import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import { Button } from '../components/ui/Button'
-import { Loader2, ChevronRight, Plus, Lock } from 'lucide-react'
+import { Loader2, Plus, Lock, Play } from 'lucide-react'
 
 type CueProgress = {
   id: string
   name: string
+  icon?: string
   calmCount: number
   totalCount: number
 }
@@ -33,7 +34,7 @@ export default function ProgressPage() {
 
       const { data: cuesData } = await supabase
         .from('custom_cues')
-        .select('id, name, calm_count, total_practices')
+        .select('id, name, icon, calm_count, total_practices')
         .eq('dog_id', dog.id)
         .order('created_at', { ascending: true })
 
@@ -41,6 +42,7 @@ export default function ProgressPage() {
         setCues(cuesData.map(c => ({
           id: c.id,
           name: c.name,
+          icon: c.icon,
           calmCount: c.calm_count || 0,
           totalCount: c.total_practices || 0,
         })))
@@ -111,8 +113,12 @@ export default function ProgressPage() {
   }, [dog])
 
   const startPractice = () => {
-  router.push('/practice?more=true')
-}
+    router.push('/practice?more=true')
+  }
+
+  const practiceSpecificCue = (cueId: string) => {
+    router.push(`/practice?cue=${cueId}`)
+  }
 
   const startAbsencePractice = () => {
     router.push('/absence-practice')
@@ -125,15 +131,16 @@ export default function ProgressPage() {
     await supabase.from('custom_cues').insert({
       dog_id: dog.id,
       name: newCueName.trim(),
-      instructions: 'Do this action calmly while your dog watches',
-      success_looks_like: 'Your dog stays relaxed',
-      if_struggling: 'Try doing it more slowly or from further away',
+      icon: '🎯',
+      instructions: `Calmly ${newCueName.trim().toLowerCase()} while your dog watches. Don't make eye contact. Repeat 10 times.`,
+      success_looks_like: `${dog.name} stays relaxed and doesn't react`,
+      if_struggling: 'Try doing it more slowly, or from further away from your dog',
     })
 
     // Reload cues
     const { data: cuesData } = await supabase
       .from('custom_cues')
-      .select('id, name, calm_count, total_practices')
+      .select('id, name, icon, calm_count, total_practices')
       .eq('dog_id', dog.id)
       .order('created_at', { ascending: true })
 
@@ -141,6 +148,7 @@ export default function ProgressPage() {
       setCues(cuesData.map(c => ({
         id: c.id,
         name: c.name,
+        icon: c.icon,
         calmCount: c.calm_count || 0,
         totalCount: c.total_practices || 0,
       })))
@@ -197,7 +205,7 @@ export default function ProgressPage() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
               Level 1: Departure Cues
             </h2>
-            <p className="text-xs text-gray-400">Practice without leaving</p>
+            <p className="text-xs text-gray-400">Tap any cue to practice it</p>
           </div>
           <div className="bg-green-50 text-green-700 text-sm font-medium px-3 py-1 rounded-full">
             {masteredCount}/{cues.length} mastered
@@ -205,35 +213,53 @@ export default function ProgressPage() {
         </div>
 
         <Button onClick={startPractice} fullWidth size="lg" className="mb-4">
-          Practice Cues
+          Smart Practice
+          <span className="text-amber-200 text-sm font-normal ml-2">(auto-selects)</span>
         </Button>
 
-        {/* Cue List */}
+        {/* Cue List - Clickable */}
         <div className="space-y-2">
           {cues.map(cue => {
             const isMastered = cue.calmCount >= 5
             const progress = Math.min(100, (cue.calmCount / 5) * 100)
+            const calmRate = cue.totalCount > 0 ? Math.round((cue.calmCount / cue.totalCount) * 100) : 0
             
             return (
-              <div 
+              <button
                 key={cue.id}
-                className="bg-white rounded-xl p-3 shadow-sm"
+                onClick={() => practiceSpecificCue(cue.id)}
+                className="w-full bg-white rounded-xl p-3 shadow-sm hover:shadow-md hover:bg-amber-50 transition-all text-left group"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">{cue.name}</span>
-                  {isMastered ? (
-                    <span className="text-green-600 text-xs font-medium">✓ Mastered</span>
-                  ) : (
-                    <span className="text-gray-400 text-xs">{cue.calmCount}/5</span>
-                  )}
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{cue.icon || '🔑'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-gray-900 text-sm truncate">{cue.name}</span>
+                      <div className="flex items-center gap-2">
+                        {isMastered ? (
+                          <span className="text-green-600 text-xs font-medium">✓ Mastered</span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">{cue.calmCount}/5 calm</span>
+                        )}
+                        <Play className="w-4 h-4 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all ${isMastered ? 'bg-green-500' : 'bg-amber-500'}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      {cue.totalCount > 0 && (
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {calmRate}% calm
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all ${isMastered ? 'bg-green-500' : 'bg-amber-500'}`}
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
+              </button>
             )
           })}
         </div>

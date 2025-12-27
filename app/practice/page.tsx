@@ -10,6 +10,10 @@ import { Loader2, Home } from 'lucide-react'
 type Cue = {
   id: string
   name: string
+  icon?: string
+  instructions?: string
+  successLooksLike?: string
+  ifStruggling?: string
   calmCount: number
   totalCount: number
   lastResponse?: string
@@ -19,8 +23,14 @@ type Cue = {
 type Response = 'calm' | 'noticed' | 'anxious'
 
 // Smart cue selection algorithm
-function selectNextCue(cues: Cue[], todaysPractices: string[]): Cue | null {
+function selectNextCue(cues: Cue[], todaysPractices: string[], specificCueId?: string): Cue | null {
   if (cues.length === 0) return null
+
+  // If a specific cue was requested, return it
+  if (specificCueId) {
+    const specificCue = cues.find(c => c.id === specificCueId)
+    if (specificCue) return specificCue
+  }
 
   // Filter out cues practiced too recently (in last 2 practices)
   const recentCueIds = todaysPractices.slice(-2)
@@ -106,15 +116,16 @@ function PracticeContent() {
   const [generating, setGenerating] = useState(false)
   
   const wantMoreParam = searchParams.get('more') === 'true'
-  const [wantMore, setWantMore] = useState(wantMoreParam)
+  const specificCueId = searchParams.get('cue')
+  const [wantMore, setWantMore] = useState(wantMoreParam || !!specificCueId)
 
   const loadData = useCallback(async () => {
     if (!dog) return
 
-    // Get cues
+    // Get cues with all fields
     const { data: customCues } = await supabase
       .from('custom_cues')
-      .select('id, name, calm_count, total_practices, last_practiced_at')
+      .select('id, name, icon, instructions, success_looks_like, if_struggling, calm_count, total_practices, last_practiced_at')
       .eq('dog_id', dog.id)
 
     // Get today's practices
@@ -157,10 +168,14 @@ function PracticeContent() {
       }
     }
 
-    // Build cue data
+    // Build cue data with all fields
     const cueData: Cue[] = customCues?.map(c => ({
       id: c.id,
       name: c.name,
+      icon: c.icon,
+      instructions: c.instructions,
+      successLooksLike: c.success_looks_like,
+      ifStruggling: c.if_struggling,
       calmCount: c.calm_count || 0,
       totalCount: c.total_practices || 0,
       lastPracticedAt: c.last_practiced_at,
@@ -179,14 +194,14 @@ function PracticeContent() {
     setTodaysCount(todaysCueIds.length)
     setTodaysGoal(getTodaysGoal(totalEver || 0, streak))
 
-    // Select first cue
+    // Select first cue (or specific cue if requested)
     if (cueData.length > 0) {
-      const next = selectNextCue(cueData, todaysCueIds)
+      const next = selectNextCue(cueData, todaysCueIds, specificCueId || undefined)
       setCurrentCue(next)
     }
 
     setLoading(false)
-  }, [dog])
+  }, [dog, specificCueId])
 
   useEffect(() => {
     if (dog) {
@@ -194,74 +209,74 @@ function PracticeContent() {
     }
   }, [dog, loadData])
 
-const generateCues = async () => {
-  if (!dog) return
-  setGenerating(true)
+  const generateCues = async () => {
+    if (!dog) return
+    setGenerating(true)
 
-  try {
-    const response = await fetch('/api/generate-cues-list', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dog }),
-    })
+    try {
+      const response = await fetch('/api/generate-cues-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dog }),
+      })
 
-    if (response.ok) {
-      const data = await response.json()
-      
-      if (data.cues && data.cues.length > 0) {
-        const cuesToInsert = data.cues.map((cue: any) => ({
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.cues && data.cues.length > 0) {
+          const cuesToInsert = data.cues.map((cue: any) => ({
+            dog_id: dog.id,
+            name: cue.name,
+            icon: cue.icon || '🔑',
+            instructions: cue.instructions,
+            success_looks_like: cue.success_looks_like,
+            if_struggling: cue.if_struggling,
+            priority: cue.priority || 'medium',
+            reason: cue.reason || '',
+            is_ai_generated: true,
+            calm_count: 0,
+            total_practices: 0,
+          }))
+
+          const { error } = await supabase.from('custom_cues').insert(cuesToInsert)
+          
+          if (error) {
+            console.error('Failed to insert cues:', error)
+          }
+          
+          await loadData()
+        }
+      } else {
+        // Fallback to default cues if API fails
+        const defaultCues = [
+          { name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold for 2 seconds, then put them down. Don\'t look at your dog. Repeat 10 times.', success_looks_like: 'Your dog stays relaxed — no pacing, whining, or following.', if_struggling: 'Just touch the keys without picking them up.' },
+          { name: 'Put on shoes', icon: '👟', instructions: 'Put on your shoes, walk around briefly, then take them off. Act casual. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t get up or show anxiety.', if_struggling: 'Just touch your shoes, then sit back down.' },
+          { name: 'Touch door handle', icon: '🚪', instructions: 'Walk to the door, touch the handle, then walk away. Don\'t open it. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t rush to the door.', if_struggling: 'Walk toward the door but stop halfway.' },
+          { name: 'Put on jacket', icon: '🧥', instructions: 'Put on your jacket, wait 5 seconds, then take it off. Repeat 10 times.', success_looks_like: 'Your dog stays settled and doesn\'t get anxious.', if_struggling: 'Just pick up the jacket without putting it on.' },
+          { name: 'Pick up bag', icon: '👜', instructions: 'Pick up your bag, carry it for a moment, then put it down. Repeat 10 times.', success_looks_like: 'Your dog remains calm and doesn\'t follow you.', if_struggling: 'Just touch the bag without picking it up.' },
+        ]
+
+        const cuesToInsert = defaultCues.map(cue => ({
           dog_id: dog.id,
           name: cue.name,
-          icon: cue.icon || '🔑',
+          icon: cue.icon,
           instructions: cue.instructions,
           success_looks_like: cue.success_looks_like,
           if_struggling: cue.if_struggling,
-          priority: cue.priority || 'medium',
-          reason: cue.reason || '',
-          is_ai_generated: true,
+          is_ai_generated: false,
           calm_count: 0,
           total_practices: 0,
         }))
 
-        const { error } = await supabase.from('custom_cues').insert(cuesToInsert)
-        
-        if (error) {
-          console.error('Failed to insert cues:', error)
-        }
-        
+        await supabase.from('custom_cues').insert(cuesToInsert)
         await loadData()
       }
-    } else {
-      // Fallback to default cues if API fails
-      const defaultCues = [
-        { name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold for 2 seconds, then put them down. Repeat 10 times.', success_looks_like: 'Your dog stays relaxed — no pacing or whining.', if_struggling: 'Just touch the keys without picking them up.' },
-        { name: 'Put on shoes', icon: '👟', instructions: 'Put on your shoes, walk around briefly, then take them off. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t get up.', if_struggling: 'Just touch your shoes, then sit back down.' },
-        { name: 'Touch door handle', icon: '🚪', instructions: 'Walk to the door, touch the handle, then walk away. Repeat 10 times.', success_looks_like: 'Your dog notices but doesn\'t rush to the door.', if_struggling: 'Walk toward the door but stop halfway.' },
-        { name: 'Put on jacket', icon: '🧥', instructions: 'Put on your jacket, wait 5 seconds, then take it off. Repeat 10 times.', success_looks_like: 'Your dog stays settled and doesn\'t get anxious.', if_struggling: 'Just pick up the jacket without putting it on.' },
-        { name: 'Pick up bag', icon: '👜', instructions: 'Pick up your bag, carry it for a moment, then put it down. Repeat 10 times.', success_looks_like: 'Your dog remains calm and doesn\'t follow you.', if_struggling: 'Just touch the bag without picking it up.' },
-      ]
-
-      const cuesToInsert = defaultCues.map(cue => ({
-        dog_id: dog.id,
-        name: cue.name,
-        icon: cue.icon,
-        instructions: cue.instructions,
-        success_looks_like: cue.success_looks_like,
-        if_struggling: cue.if_struggling,
-        is_ai_generated: false,
-        calm_count: 0,
-        total_practices: 0,
-      }))
-
-      await supabase.from('custom_cues').insert(cuesToInsert)
-      await loadData()
+    } catch (error) {
+      console.error('Error generating cues:', error)
     }
-  } catch (error) {
-    console.error('Error generating cues:', error)
-  }
 
-  setGenerating(false)
-}
+    setGenerating(false)
+  }
 
   const logResponse = async (response: Response) => {
     if (!dog || !currentCue) return
@@ -305,6 +320,11 @@ const generateCues = async () => {
     setLastResponse(null)
     setWantMore(true)
     
+    // Clear specific cue param for next selection
+    if (specificCueId) {
+      router.replace('/practice?more=true')
+    }
+    
     // Reload data and select next cue
     await loadData()
   }
@@ -331,10 +351,10 @@ const generateCues = async () => {
           Setting up {dog?.name}&apos;s practice
         </h1>
         <p className="text-gray-500 text-center mb-8">
-          We&apos;ll create some departure cues to practice
+          We&apos;ll create personalized departure cues to practice
         </p>
         <Button onClick={generateCues} loading={generating} size="lg">
-          {generating ? 'Creating...' : 'Get Started'}
+          {generating ? 'Creating cues...' : 'Get Started'}
         </Button>
       </div>
     )
@@ -389,6 +409,19 @@ const generateCues = async () => {
       return `That's okay, we'll keep working on it`
     }
 
+    const getResultTip = () => {
+      if (lastResponse === 'calm') {
+        return `Great progress! ${currentCue.calmCount + 1} calm responses on this cue.`
+      }
+      if (lastResponse === 'noticed') {
+        return "Noticing without reacting is actually progress!"
+      }
+      if (currentCue.ifStruggling) {
+        return `💡 Try this: ${currentCue.ifStruggling}`
+      }
+      return "Try doing it more slowly or from further away next time."
+    }
+
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
         <main className="flex-1 flex flex-col items-center justify-center px-6">
@@ -396,6 +429,9 @@ const generateCues = async () => {
           <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">
             {getResultMessage()}
           </h1>
+          <p className="text-gray-500 text-center mb-2">
+            {getResultTip()}
+          </p>
           <p className="text-gray-400 mb-8">
             {hitGoal ? "You've hit today's goal!" : `${remaining} more to go today`}
           </p>
@@ -431,15 +467,34 @@ const generateCues = async () => {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-8">
         {currentCue && (
           <>
-            <span className="text-6xl mb-6">🔑</span>
-            <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">
+            <span className="text-5xl mb-4">{currentCue.icon || '🔑'}</span>
+            <h1 className="text-2xl font-bold text-gray-900 text-center mb-3">
               {currentCue.name}
             </h1>
-            <p className="text-gray-400 text-center mb-10">
-              Do it, then tell us how {dog?.name} reacted
+            
+            {/* Instructions */}
+            {currentCue.instructions && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4 max-w-sm">
+                <p className="text-blue-800 text-sm leading-relaxed">
+                  {currentCue.instructions}
+                </p>
+              </div>
+            )}
+
+            {/* What calm looks like */}
+            {currentCue.successLooksLike && (
+              <div className="bg-green-50 border border-green-100 rounded-xl p-3 mb-6 max-w-sm">
+                <p className="text-green-800 text-sm">
+                  <span className="font-semibold">✓ Calm:</span> {currentCue.successLooksLike}
+                </p>
+              </div>
+            )}
+
+            <p className="text-gray-400 text-center mb-6">
+              How did {dog?.name} react?
             </p>
 
             {/* Response buttons */}
@@ -466,6 +521,15 @@ const generateCues = async () => {
                 Anxious
               </button>
             </div>
+
+            {/* Tip if struggling */}
+            {currentCue.ifStruggling && (
+              <div className="mt-6 max-w-sm">
+                <p className="text-gray-400 text-xs text-center">
+                  <span className="font-semibold">💡 If anxious:</span> {currentCue.ifStruggling}
+                </p>
+              </div>
+            )}
           </>
         )}
       </main>
