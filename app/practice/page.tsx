@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { Button } from '../components/ui/Button'
 import { Loader2, Home } from 'lucide-react'
-import { useSearchParams } from 'next/navigation'
 
 type Cue = {
   id: string
@@ -91,8 +90,9 @@ function getTimeOfDay(): string {
   return 'evening'
 }
 
-export default function PracticePage() {
+function PracticeContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { dog, loading: dogLoading } = useSelectedDog()
 
   const [cues, setCues] = useState<Cue[]>([])
@@ -104,9 +104,9 @@ export default function PracticePage() {
   const [todaysGoal, setTodaysGoal] = useState(3)
   const [todaysCount, setTodaysCount] = useState(0)
   const [generating, setGenerating] = useState(false)
-  const searchParams = useSearchParams()
-const wantMoreParam = searchParams.get('more') === 'true'
-const [wantMore, setWantMore] = useState(wantMoreParam)
+  
+  const wantMoreParam = searchParams.get('more') === 'true'
+  const [wantMore, setWantMore] = useState(wantMoreParam)
 
   const loadData = useCallback(async () => {
     if (!dog) return
@@ -443,5 +443,17 @@ const [wantMore, setWantMore] = useState(wantMoreParam)
         </button>
       </div>
     </div>
+  )
+}
+
+export default function PracticePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      </div>
+    }>
+      <PracticeContent />
+    </Suspense>
   )
 }
