@@ -4,6 +4,7 @@ import './globals.css'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { DogProvider } from './context/DogContext'
+import FeedbackBanner from './components/FeedbackBanner'
 
 const nunito = Nunito({ 
   subsets: ['latin'],
@@ -15,8 +16,6 @@ export const metadata: Metadata = {
   description: 'Help your dog overcome separation anxiety with personalized AI-guided training missions.',
 }
 
-const instaUrl = "https://instagram.com/pawcalm.ai"
-
 export default function RootLayout({
   children,
 }: {
@@ -25,13 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${nunito.className} flex flex-col min-h-screen bg-[#FDFBF7]`}>
-        {/* Beta Banner */}
-        <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium">
-          Beta - Follow us on Instagram{' '}
-          <a href={instaUrl} target="_blank" className="underline">
-            @pawcalm.ai
-          </a>
-        </div>
+        <FeedbackBanner />
         
         <DogProvider>
           <main className="flex-grow">{children}</main>

@@ -37,7 +37,7 @@ export default function FeedbackButton() {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 bg-amber-600 hover:bg-amber-700 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl transition-all hover:scale-110 z-40"
+        className="fixed bottom-20 right-4 bg-amber-600 hover:bg-amber-700 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl transition-all hover:scale-110 z-40"
         title="Give feedback"
       >
         💬
