@@ -64,20 +64,23 @@ export function useSelectedDog(redirectIfNone: boolean = true): UseSelectedDogRe
     }
   }, [redirectIfNone, router])
 
- const selectDogFromStorage = useCallback((dogsData: Dog[]) => {
-  const savedDogId = localStorage.getItem('selectedDogId')
-  
-  // Compare as strings since localStorage stores strings
-  let selectedDog = dogsData.find(d => String(d.id) === savedDogId)
+  const selectDogFromStorage = useCallback((dogsData: Dog[]) => {
+    // Only run on client side
+    if (typeof window === 'undefined') return
+    
+    const savedDogId = localStorage.getItem('selectedDogId')
+    
+    // Compare as strings since localStorage stores strings
+    let selectedDog = dogsData.find(d => String(d.id) === savedDogId)
 
-  if (!selectedDog) {
-    selectedDog = dogsData[0]
-    localStorage.setItem('selectedDogId', String(selectedDog.id))
-  }
+    if (!selectedDog) {
+      selectedDog = dogsData[0]
+      localStorage.setItem('selectedDogId', String(selectedDog.id))
+    }
 
-  setDog(selectedDog)
-  setLoading(false)
-}, [])
+    setDog(selectedDog)
+    setLoading(false)
+  }, [])
 
   const fetchDog = useCallback(async () => {
     const dogsData = await fetchDogs()
@@ -112,7 +115,7 @@ export function useSelectedDog(redirectIfNone: boolean = true): UseSelectedDogRe
 
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'selectedDogId' && event.newValue && dogs.length > 0) {
-        const newDog = dogs.find(d => d.id === event.newValue)
+        const newDog = dogs.find(d => String(d.id) === event.newValue)
         if (newDog) {
           setDog(newDog)
         }

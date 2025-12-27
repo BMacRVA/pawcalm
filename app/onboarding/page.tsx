@@ -3,648 +3,119 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
-import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { ArrowLeft, Check, Sparkles } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
-const COMMON_TRIGGERS = [
-  { id: 'keys', label: 'Picking up keys', icon: '🔑' },
-  { id: 'shoes', label: 'Putting on shoes', icon: '👟' },
-  { id: 'jacket', label: 'Putting on jacket/coat', icon: '🧥' },
-  { id: 'bag', label: 'Grabbing bag or purse', icon: '👜' },
-  { id: 'door', label: 'Going near the door', icon: '🚪' },
-  { id: 'morning', label: 'Morning routine', icon: '🌅' },
-  { id: 'shower', label: 'Taking a shower', icon: '🚿' },
-  { id: 'makeup', label: 'Getting ready/makeup', icon: '💄' },
-  { id: 'coffee', label: 'Making coffee to go', icon: '☕' },
-  { id: 'laptop', label: 'Packing laptop/work bag', icon: '💻' },
-]
-
-const COMMON_BEHAVIORS = [
-  { id: 'barking', label: 'Barking or howling', icon: '🗣️' },
-  { id: 'pacing', label: 'Pacing or restlessness', icon: '🚶' },
-  { id: 'whining', label: 'Whining or crying', icon: '😢' },
-  { id: 'destruction', label: 'Destructive behavior', icon: '💥' },
-  { id: 'accidents', label: 'Bathroom accidents', icon: '💧' },
-  { id: 'escape', label: 'Trying to escape', icon: '🏃' },
-  { id: 'drooling', label: 'Excessive drooling', icon: '💦' },
-  { id: 'following', label: 'Following you everywhere', icon: '👀' },
-  { id: 'shaking', label: 'Trembling or shaking', icon: '😰' },
-  { id: 'noteat', label: 'Won\'t eat when alone', icon: '🍽️' },
-]
-
-const PREPARATION_MESSAGES = [
-  { emoji: '🧠', text: 'Analyzing your dog\'s triggers...' },
-  { emoji: '📋', text: 'Creating personalized cues...' },
-  { emoji: '🎯', text: 'Building your training plan...' },
-  { emoji: '✨', text: 'Almost ready!' },
+// Default cues - no API needed
+const DEFAULT_CUES = [
+  'Pick up your keys',
+  'Put on your shoes',
+  'Grab your bag',
+  'Touch the door handle',
+  'Put on your jacket',
 ]
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [preparingPlan, setPreparingPlan] = useState(false)
-  const [prepMessage, setPrepMessage] = useState(0)
-  
-  // Step 1: Basic info
   const [dogName, setDogName] = useState('')
-  const [breed, setBreed] = useState('')
-  const [age, setAge] = useState('')
-  
-  // Step 2: Triggers
-  const [selectedTriggers, setSelectedTriggers] = useState<string[]>([])
-  const [customTrigger, setCustomTrigger] = useState('')
-  const [customTriggers, setCustomTriggers] = useState<string[]>([])
-  
-  // Step 3: Behaviors
-  const [selectedBehaviors, setSelectedBehaviors] = useState<string[]>([])
-  const [otherBehavior, setOtherBehavior] = useState('')
-  
-  // Step 4: Severity & Context
-  const [severity, setSeverity] = useState('moderate')
-  const [baseline, setBaseline] = useState('')
-  const [ownerSchedule, setOwnerSchedule] = useState('')
-  const [leaveDuration, setLeaveDuration] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const toggleTrigger = (id: string) => {
-    setSelectedTriggers(prev => 
-      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-    )
-  }
-
-  const addCustomTrigger = () => {
-    if (customTrigger.trim() && !customTriggers.includes(customTrigger.trim())) {
-      setCustomTriggers([...customTriggers, customTrigger.trim()])
-      setCustomTrigger('')
-    }
-  }
-
-  const toggleBehavior = (id: string) => {
-    setSelectedBehaviors(prev => 
-      prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]
-    )
-  }
-
-  const handleSubmit = async () => {
+  const handleStart = async () => {
+    if (!dogName.trim()) return
     setLoading(true)
-    setPreparingPlan(true)
 
-    // Start cycling through preparation messages
-    const messageInterval = setInterval(() => {
-      setPrepMessage(prev => (prev + 1) % PREPARATION_MESSAGES.length)
-    }, 2000)
+    const { data: { user } } = await supabase.auth.getUser()
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        clearInterval(messageInterval)
-        alert('Please log in first')
-        router.push('/login')
-        return
-      }
-
-      const behaviorLabels = selectedBehaviors.map(id => 
-        COMMON_BEHAVIORS.find(b => b.id === id)?.label
-      ).filter(Boolean)
-      const behaviorText = [...behaviorLabels, otherBehavior].filter(Boolean).join(', ')
-
-      // Save the dog
-      const { data: dogData, error: dogError } = await supabase
-        .from('dogs')
-        .insert([{
-          name: dogName,
-          breed: breed,
-          age: age,
-          baseline: parseInt(baseline) || 5,
-          behavior: behaviorText,
-          triggers: selectedTriggers,
-          behaviors: selectedBehaviors,
-          severity: severity,
-          owner_schedule: ownerSchedule,
-          leave_duration: leaveDuration,
-          custom_triggers: customTriggers,
-          user_id: user.id,
-        }])
-        .select()
-        .single()
-
-      if (dogError) {
-        clearInterval(messageInterval)
-        console.error('Error:', dogError)
-        alert('Error saving: ' + dogError.message)
-        setLoading(false)
-        setPreparingPlan(false)
-        return
-      }
-
-      // Set this as the selected dog
-      localStorage.setItem('selectedDogId', String(dogData.id))
-
-      // Now generate cues for the new dog
-      const triggerLabels = selectedTriggers.map(id => 
-        COMMON_TRIGGERS.find(t => t.id === id)?.label
-      ).filter(Boolean)
-
-      const dogForCues = {
-        ...dogData,
-        triggers: triggerLabels,
-        custom_triggers: customTriggers,
-        behaviors: behaviorLabels,
-      }
-
-      const cueResponse = await fetch('/api/generate-cues-list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dog: dogForCues }),
-      })
-
-      if (cueResponse.ok) {
-        const cueData = await cueResponse.json()
-        
-        // Save cues to database
-        if (cueData.cues && cueData.cues.length > 0) {
-          const cuesToInsert = cueData.cues.map((cue: any) => ({
-            dog_id: dogData.id,
-            name: cue.name,
-            icon: cue.icon,
-            instructions: cue.instructions,
-            success_looks_like: cue.success_looks_like,
-            if_struggling: cue.if_struggling,
-            priority: cue.priority,
-            reason: cue.reason,
-            is_ai_generated: true,
-            is_custom: false,
-          }))
-
-          await supabase.from('custom_cues').insert(cuesToInsert)
-        }
-      }
-
-      clearInterval(messageInterval)
-      router.push('/welcome')
-      
-    } catch (error) {
-      clearInterval(messageInterval)
-      console.error('Error:', error)
-      setLoading(false)
-      setPreparingPlan(false)
+    if (!user) {
+      router.push('/login')
+      return
     }
-  }
 
-  const stepTitles = [
-    { title: "Let's meet your dog", subtitle: "We'll use this to personalize everything" },
-    { title: `What triggers ${dogName || 'your dog'}?`, subtitle: `Select anything that makes ${dogName || 'them'} anxious` },
-    { title: `How does ${dogName || 'your dog'} react?`, subtitle: "What happens when you leave or prepare to leave?" },
-    { title: "Almost done!", subtitle: `A few more details to personalize ${dogName || 'your dog'}'s plan` },
-  ]
+    // Create dog
+    const { data: newDog, error } = await supabase
+      .from('dogs')
+      .insert([{
+        name: dogName.trim(),
+        user_id: user.id,
+        severity: 'moderate',
+        baseline: 5,
+        guidance_level: 'moderate',
+      }])
+      .select()
 
-  // Show preparation screen
-  if (preparingPlan) {
-    return (
-      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center px-4">
-        <Card variant="elevated" padding="lg" className="max-w-md w-full text-center">
-          <div className="mb-6">
-            <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <Sparkles className="w-10 h-10 text-amber-600" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Creating {dogName}&apos;s Plan
-            </h1>
-            <p className="text-gray-600">
-              Our AI is building a personalized training program
-            </p>
-          </div>
+    if (error) {
+      console.error('Error:', error)
+      alert('Something went wrong. Please try again.')
+      setLoading(false)
+      return
+    }
 
-          <div className="bg-amber-50 rounded-xl p-4 mb-6">
-            <div className="flex items-center justify-center gap-3">
-              <span className="text-2xl">{PREPARATION_MESSAGES[prepMessage].emoji}</span>
-              <p className="text-amber-800 font-medium">
-                {PREPARATION_MESSAGES[prepMessage].text}
-              </p>
-            </div>
-          </div>
+    if (newDog && newDog[0]) {
+      // Auto-select this dog
+      localStorage.setItem('selectedDogId', newDog[0].id)
+console.log('Set selectedDogId:', newDog[0].id)
+      
+ // Create default cues immediately
+const cuesToInsert = DEFAULT_CUES.map(name => ({
+  dog_id: newDog[0].id,
+  name: name,
+  instructions: 'Do this action calmly while your dog watches',
+  success_looks_like: 'Your dog stays relaxed',
+  if_struggling: 'Try doing it more slowly or from further away',
+}))
 
-          <div className="flex justify-center gap-2">
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className={`w-2 h-2 rounded-full transition-all ${
-                  i === prepMessage ? 'bg-amber-500 w-4' : 'bg-amber-200'
-                }`}
-              />
-            ))}
-          </div>
-        </Card>
-      </div>
-    )
+const { error: cueError } = await supabase.from('custom_cues').insert(cuesToInsert)
+if (cueError) console.error('Cue insert error:', cueError)
+    }
+
+    // Go straight to practice
+    router.push('/practice')
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
-      {/* Header */}
-      <header className="sticky top-0 bg-[#FDFBF7] border-b border-gray-100 px-4 py-4 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          {step > 1 ? (
-            <button 
-              onClick={() => setStep(step - 1)}
-              className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition"
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-          ) : (
-            <div className="w-10" />
-          )}
+    <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
+      <main className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="w-full max-w-sm">
           
-          <div className="flex items-center gap-2">
-            {[1, 2, 3, 4].map((s) => (
-              <div
-                key={s}
-                className={`h-2 rounded-full transition-all ${
-                  s === step ? 'w-8 bg-amber-500' : s < step ? 'w-2 bg-amber-500' : 'w-2 bg-gray-200'
-                }`}
-              />
-            ))}
+          <div className="text-center mb-8">
+            <span className="text-7xl">🐕</span>
           </div>
-          
-          <span className="text-sm text-gray-500 w-10 text-right">{step}/4</span>
-        </div>
-      </header>
 
-      <main className="px-4 py-6">
-        <div className="max-w-lg mx-auto">
-          
-          {/* Step 1: Basic Info */}
-          {step === 1 && (
-            <Card variant="elevated" padding="lg">
-              <div className="text-center mb-6">
-                <span className="text-5xl mb-3 block">🐕</span>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">{stepTitles[0].title}</h1>
-                <p className="text-gray-600">{stepTitles[0].subtitle}</p>
-              </div>
+          <h1 className="text-2xl font-bold text-gray-900 text-center mb-8">
+            What&apos;s your dog&apos;s name?
+          </h1>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    What&apos;s your dog&apos;s name?
-                  </label>
-                  <input
-                    type="text"
-                    value={dogName}
-                    onChange={(e) => setDogName(e.target.value)}
-                    placeholder="e.g., Luna"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-amber-500 focus:outline-none text-gray-900 placeholder:text-gray-400"
-                  />
-                </div>
+          <input
+            type="text"
+            value={dogName}
+            onChange={(e) => setDogName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleStart()}
+            placeholder="Luna"
+            autoFocus
+            className="w-full px-6 py-4 text-xl text-center border-2 border-gray-200 rounded-2xl focus:border-amber-500 focus:outline-none text-gray-900 placeholder:text-gray-300"
+          />
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Breed
-                  </label>
-                  <input
-                    type="text"
-                    value={breed}
-                    onChange={(e) => setBreed(e.target.value)}
-                    placeholder="e.g., Labrador Mix"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-amber-500 focus:outline-none text-gray-900 placeholder:text-gray-400"
-                  />
-                </div>
+          <Button
+            onClick={handleStart}
+            disabled={!dogName.trim() || loading}
+            fullWidth
+            size="lg"
+            className="mt-6"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Setting up...
+              </>
+            ) : (
+              "Let's start →"
+            )}
+          </Button>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Age
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: 'puppy', label: 'Puppy', sub: '0-1 year' },
-                      { value: 'young', label: 'Young', sub: '1-3 years' },
-                      { value: 'adult', label: 'Adult', sub: '3-7 years' },
-                      { value: 'senior', label: 'Senior', sub: '7+ years' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setAge(opt.value)}
-                        className={`p-3 rounded-xl border-2 text-left transition ${
-                          age === opt.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <p className={`font-semibold ${age === opt.value ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {opt.label}
-                        </p>
-                        <p className="text-xs text-gray-500">{opt.sub}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+          <p className="text-center text-gray-400 text-sm mt-6">
+            Takes about 2 minutes a day
+          </p>
 
-                <Button
-                  onClick={() => setStep(2)}
-                  disabled={!dogName || !breed || !age}
-                  fullWidth
-                  size="lg"
-                  className="mt-4"
-                >
-                  Continue
-                </Button>
-              </div>
-            </Card>
-          )}
-
-          {/* Step 2: Triggers */}
-          {step === 2 && (
-            <Card variant="elevated" padding="lg">
-              <div className="text-center mb-6">
-                <span className="text-5xl mb-3 block">🔑</span>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">{stepTitles[1].title}</h1>
-                <p className="text-gray-600">{stepTitles[1].subtitle}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {COMMON_TRIGGERS.map(trigger => (
-                  <button
-                    key={trigger.id}
-                    type="button"
-                    onClick={() => toggleTrigger(trigger.id)}
-                    className={`p-3 rounded-xl border-2 text-left transition relative ${
-                      selectedTriggers.includes(trigger.id)
-                        ? 'border-amber-500 bg-amber-50'
-                        : 'border-gray-200 hover:border-amber-300'
-                    }`}
-                  >
-                    {selectedTriggers.includes(trigger.id) && (
-                      <div className="absolute top-2 right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                    <span className="text-xl">{trigger.icon}</span>
-                    <p className={`text-sm font-medium mt-1 ${
-                      selectedTriggers.includes(trigger.id) ? 'text-amber-700' : 'text-gray-700'
-                    }`}>
-                      {trigger.label}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom triggers */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-800 mb-2">
-                  Anything else?
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customTrigger}
-                    onChange={(e) => setCustomTrigger(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomTrigger())}
-                    placeholder="e.g., Starting my car"
-                    className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-amber-500 focus:outline-none text-gray-900 placeholder:text-gray-400"
-                  />
-                  <Button
-                    onClick={addCustomTrigger}
-                    disabled={!customTrigger.trim()}
-                    variant="secondary"
-                  >
-                    Add
-                  </Button>
-                </div>
-                {customTriggers.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {customTriggers.map((t, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-3 py-1.5 rounded-full text-sm font-medium">
-                        ⭐ {t}
-                        <button 
-                          onClick={() => setCustomTriggers(customTriggers.filter((_, idx) => idx !== i))}
-                          className="ml-1 text-amber-600 hover:text-amber-800"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Button
-                onClick={() => setStep(3)}
-                disabled={selectedTriggers.length === 0 && customTriggers.length === 0}
-                fullWidth
-                size="lg"
-              >
-                Continue
-              </Button>
-            </Card>
-          )}
-
-          {/* Step 3: Behaviors */}
-          {step === 3 && (
-            <Card variant="elevated" padding="lg">
-              <div className="text-center mb-6">
-                <span className="text-5xl mb-3 block">😰</span>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">{stepTitles[2].title}</h1>
-                <p className="text-gray-600">{stepTitles[2].subtitle}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {COMMON_BEHAVIORS.map(behavior => (
-                  <button
-                    key={behavior.id}
-                    type="button"
-                    onClick={() => toggleBehavior(behavior.id)}
-                    className={`p-3 rounded-xl border-2 text-left transition relative ${
-                      selectedBehaviors.includes(behavior.id)
-                        ? 'border-red-400 bg-red-50'
-                        : 'border-gray-200 hover:border-red-300'
-                    }`}
-                  >
-                    {selectedBehaviors.includes(behavior.id) && (
-                      <div className="absolute top-2 right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                    <span className="text-xl">{behavior.icon}</span>
-                    <p className={`text-sm font-medium mt-1 ${
-                      selectedBehaviors.includes(behavior.id) ? 'text-red-700' : 'text-gray-700'
-                    }`}>
-                      {behavior.label}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-800 mb-2">
-                  Anything else you&apos;ve noticed?
-                </label>
-                <textarea
-                  value={otherBehavior}
-                  onChange={(e) => setOtherBehavior(e.target.value)}
-                  placeholder="e.g., Scratches at the door, hides under the bed..."
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-amber-500 focus:outline-none text-gray-900 placeholder:text-gray-400 resize-none"
-                  rows={2}
-                />
-              </div>
-
-              <Button
-                onClick={() => setStep(4)}
-                disabled={selectedBehaviors.length === 0 && !otherBehavior}
-                fullWidth
-                size="lg"
-              >
-                Continue
-              </Button>
-            </Card>
-          )}
-
-          {/* Step 4: Severity & Context */}
-          {step === 4 && (
-            <Card variant="elevated" padding="lg">
-              <div className="text-center mb-6">
-                <span className="text-5xl mb-3 block">✨</span>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">{stepTitles[3].title}</h1>
-                <p className="text-gray-600">{stepTitles[3].subtitle}</p>
-              </div>
-
-              <div className="space-y-6">
-                {/* Severity */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-3">
-                    How severe is {dogName}&apos;s anxiety?
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: 'mild', label: 'Mild', emoji: '😟', desc: 'Some stress' },
-                      { value: 'moderate', label: 'Moderate', emoji: '😰', desc: 'Clear distress' },
-                      { value: 'severe', label: 'Severe', emoji: '😱', desc: 'Extreme panic' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setSeverity(opt.value)}
-                        className={`p-3 rounded-xl border-2 text-center transition ${
-                          severity === opt.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <span className="text-2xl">{opt.emoji}</span>
-                        <p className={`font-semibold text-sm ${severity === opt.value ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {opt.label}
-                        </p>
-                        <p className="text-xs text-gray-500">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Baseline */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-3">
-                    How long can {dogName} be alone before getting anxious?
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {[
-                      { value: '0', label: '0 min' },
-                      { value: '5', label: '5 min' },
-                      { value: '15', label: '15 min' },
-                      { value: '30', label: '30+ min' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setBaseline(opt.value)}
-                        className={`p-3 rounded-xl border-2 text-center transition ${
-                          baseline === opt.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <p className={`font-semibold text-sm ${baseline === opt.value ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {opt.label}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Owner schedule */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-3">
-                    What&apos;s your typical schedule?
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: 'wfh', label: 'Work from home', desc: 'Mostly home' },
-                      { value: 'hybrid', label: 'Hybrid', desc: 'Some days out' },
-                      { value: 'office', label: 'Office/Away', desc: 'Out daily' },
-                      { value: 'varies', label: 'Varies', desc: 'Unpredictable' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setOwnerSchedule(opt.value)}
-                        className={`p-3 rounded-xl border-2 text-left transition ${
-                          ownerSchedule === opt.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <p className={`font-semibold text-sm ${ownerSchedule === opt.value ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {opt.label}
-                        </p>
-                        <p className="text-xs text-gray-500">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Leave duration goal */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-3">
-                    How long do you need {dogName} to be okay alone?
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: '1hour', label: '1 hour', desc: 'Quick errands' },
-                      { value: '4hours', label: '4 hours', desc: 'Half day' },
-                      { value: '8hours', label: '8+ hours', desc: 'Full workday' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setLeaveDuration(opt.value)}
-                        className={`p-3 rounded-xl border-2 text-center transition ${
-                          leaveDuration === opt.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <p className={`font-semibold text-sm ${leaveDuration === opt.value ? 'text-amber-700' : 'text-gray-900'}`}>
-                          {opt.label}
-                        </p>
-                        <p className="text-xs text-gray-500">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleSubmit}
-                  disabled={loading || !baseline || !ownerSchedule || !leaveDuration}
-                  loading={loading}
-                  fullWidth
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700 mt-2"
-                >
-                  {loading ? 'Creating plan...' : 'Start Training →'}
-                </Button>
-              </div>
-            </Card>
-          )}
         </div>
       </main>
     </div>

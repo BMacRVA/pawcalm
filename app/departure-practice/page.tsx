@@ -9,8 +9,7 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { CueCard, CueList } from '../components/domain/CueCard'
-import { Plus, Sparkles, RotateCcw, Check } from 'lucide-react'
-import { getPostPracticeMessage } from '../lib/ownerSupport'
+import { Plus, Sparkles, RotateCcw, Check, ChevronDown, ChevronUp } from 'lucide-react'
 
 type Cue = {
   id: string
@@ -41,6 +40,24 @@ function getCueType(cueName: string): string {
   return 'other'
 }
 
+// Progress dots component
+function ProgressDots({ current, total = 5 }: { current: number; total?: number }) {
+  return (
+    <div className="flex gap-2 justify-center">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`w-4 h-4 rounded-full transition-all ${
+            i < current 
+              ? 'bg-amber-500' 
+              : 'bg-gray-200'
+          }`}
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function DeparturePracticePage() {
   const router = useRouter()
   const { dog, loading: dogLoading } = useSelectedDog()
@@ -55,11 +72,9 @@ export default function DeparturePracticePage() {
   const [newCueName, setNewCueName] = useState('')
   const [generating, setGenerating] = useState(false)
   const [sessionSequence, setSessionSequence] = useState(0)
-  const [consecutiveCalm, setConsecutiveCalm] = useState(0)
   const [consecutiveAnxious, setConsecutiveAnxious] = useState(0)
-  const [supportMessage, setSupportMessage] = useState('')
   const [updatedCalmCount, setUpdatedCalmCount] = useState(0)
-  const [updatedTotalCount, setUpdatedTotalCount] = useState(0)
+  const [showExplanation, setShowExplanation] = useState(false)
 
   const loadCues = useCallback(async () => {
     if (!dog) return
@@ -181,7 +196,7 @@ export default function DeparturePracticePage() {
     setPracticeMode(true)
     setShowResult(false)
     setLastResponse(null)
-    setSupportMessage('')
+    setShowExplanation(false)
   }
 
   const logResponse = async (response: PracticeResponse) => {
@@ -190,32 +205,16 @@ export default function DeparturePracticePage() {
     setLastResponse(response)
     setSessionSequence(prev => prev + 1)
 
-    // Calculate new counts immediately for display
+    // Calculate new calm count immediately for display
     const newCalmCount = selectedCue.calmCount + (response === 'calm' ? 1 : 0)
-    const newTotalCount = selectedCue.totalCount + 1
-    setUpdatedCalmCount(newCalmCount)
-    setUpdatedTotalCount(newTotalCount)
+    setUpdatedCalmCount(Math.min(newCalmCount, 5)) // Cap at 5 for display
 
-    // Update consecutive counters
-    if (response === 'calm') {
-      setConsecutiveCalm(prev => prev + 1)
-      setConsecutiveAnxious(0)
-    } else if (response === 'anxious') {
+    // Track consecutive anxious for suggestions
+    if (response === 'anxious') {
       setConsecutiveAnxious(prev => prev + 1)
-      setConsecutiveCalm(0)
     } else {
-      setConsecutiveCalm(0)
       setConsecutiveAnxious(0)
     }
-
-    // Generate support message
-    const message = getPostPracticeMessage(
-      response,
-      response === 'calm' ? consecutiveCalm + 1 : 0,
-      response === 'anxious' ? consecutiveAnxious + 1 : 0,
-      dog.name
-    )
-    setSupportMessage(message)
 
     const now = new Date()
     const today = now.toISOString().split('T')[0]
@@ -229,7 +228,7 @@ export default function DeparturePracticePage() {
 
     const practiceNumber = selectedCue.totalCount + 1
 
-    // Insert enriched practice data
+    // Insert practice data
     await supabase.from('cue_practices').insert({
       dog_id: dog.id,
       cues: [{
@@ -244,14 +243,14 @@ export default function DeparturePracticePage() {
       practices_today: (practicesToday || 0) + 1,
     })
 
-    // Update cue statistics
-    const calmRate = newTotalCount > 0 ? newCalmCount / newTotalCount : 0
-    const justMastered = newCalmCount >= 5 && calmRate >= 0.7
+    // Simple mastery: 5 calm responses
+    const justMastered = newCalmCount >= 5 && selectedCue.calmCount < 5
 
+    // Update cue statistics
     await supabase
       .from('custom_cues')
       .update({
-        total_practices: newTotalCount,
+        total_practices: selectedCue.totalCount + 1,
         calm_count: newCalmCount,
         last_practiced_at: now.toISOString(),
         ...(justMastered ? { mastered_at: now.toISOString() } : {}),
@@ -288,7 +287,6 @@ export default function DeparturePracticePage() {
     setShowResult(false)
     setLastResponse(null)
     setSessionSequence(0)
-    setConsecutiveCalm(0)
     setConsecutiveAnxious(0)
     router.push('/dashboard')
   }
@@ -315,9 +313,46 @@ export default function DeparturePracticePage() {
 
   // Practice Mode - Show Result
   if (practiceMode && showResult && selectedCue) {
-    const calmRate = updatedTotalCount > 0 ? updatedCalmCount / updatedTotalCount : 0
-    const justMastered = updatedCalmCount >= 5 && calmRate >= 0.7 && selectedCue.calmCount < 5
-    const cuesRemaining = Math.max(0, 5 - updatedCalmCount)
+    const justMastered = updatedCalmCount >= 5 && selectedCue.calmCount < 5
+    const remaining = Math.max(0, 5 - updatedCalmCount)
+
+    // Simple, clear messages
+    const getResultContent = () => {
+      if (justMastered) {
+        return {
+          emoji: '🏆',
+          title: 'Cue Mastered!',
+          message: `Amazing! ${dog?.name} has learned that "${selectedCue.name}" doesn't mean you're leaving.`,
+        }
+      }
+      
+      if (lastResponse === 'calm') {
+        return {
+          emoji: '🎉',
+          title: 'Nice work!',
+          message: remaining > 0 
+            ? `${remaining} more to go. ${dog?.name} is learning!`
+            : `${dog?.name} has got this down!`,
+        }
+      }
+      
+      if (lastResponse === 'slight_reaction') {
+        return {
+          emoji: '👍',
+          title: 'Good effort!',
+          message: `${dog?.name} noticed but stayed relatively calm. That's progress! ${remaining} more calm responses to master this cue.`,
+        }
+      }
+      
+      // anxious
+      return {
+        emoji: '💪',
+        title: 'Keep going!',
+        message: `That's okay - setbacks happen. ${remaining} more calm responses to master this cue.`,
+      }
+    }
+
+    const content = getResultContent()
 
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
@@ -326,43 +361,64 @@ export default function DeparturePracticePage() {
         <main className="px-4 py-6">
           <div className="max-w-lg mx-auto">
             <Card variant="elevated" padding="lg" className="text-center">
-              <span className="text-6xl mb-4 block">
-                {justMastered ? '🏆' : lastResponse === 'calm' ? '🎉' : lastResponse === 'slight_reaction' ? '👍' : '💪'}
-              </span>
+              
+              {/* Emoji */}
+              <span className="text-6xl mb-4 block">{content.emoji}</span>
+              
+              {/* Title */}
               <h2 className="text-xl font-bold text-gray-900 mb-2">
-                {justMastered && `${selectedCue.name} Mastered!`}
-                {!justMastered && lastResponse === 'calm' && 'Amazing!'}
-                {!justMastered && lastResponse === 'slight_reaction' && 'Good effort!'}
-                {!justMastered && lastResponse === 'anxious' && 'Keep going!'}
+                {content.title}
               </h2>
               
-              <p className="text-gray-600 mb-6">
-                {supportMessage}
+              {/* Cue name */}
+              <p className="text-amber-600 font-medium mb-4">
+                {selectedCue.name}
               </p>
 
-              <Card variant="filled" padding="md" className="mb-6 text-left">
-                <p className="text-amber-800 text-sm">
-                  <strong>📊 {selectedCue.name}:</strong> {updatedCalmCount} calm / {updatedTotalCount} total ({Math.round(calmRate * 100)}%)
+              {/* Progress dots */}
+              <div className="mb-4">
+                <ProgressDots current={updatedCalmCount} />
+                <p className="text-sm text-gray-500 mt-2">
+                  {updatedCalmCount} of 5 calm responses
                 </p>
-                {updatedCalmCount >= 5 && calmRate >= 0.7 ? (
-                  <p className="text-green-700 text-sm mt-1">✓ Mastered!</p>
-                ) : (
-                  <p className="text-amber-700 text-sm mt-1">
-                    {cuesRemaining > 0 
-                      ? `${cuesRemaining} more calm response${cuesRemaining !== 1 ? 's' : ''} needed`
-                      : 'Need 70%+ calm rate for mastery'}
-                  </p>
-                )}
-              </Card>
+              </div>
 
-              {consecutiveAnxious >= 2 && (
-                <Card variant="outlined" padding="md" className="mb-6 bg-blue-50 border-blue-200">
-                  <p className="text-blue-800 text-sm">
-                    <strong>💡 Suggestion:</strong> {dog?.name} might need a break, or try a cue that&apos;s been going well.
+              {/* Message */}
+              <p className="text-gray-600 mb-6">
+                {content.message}
+              </p>
+
+              {/* Expandable explanation */}
+              <button
+                onClick={() => setShowExplanation(!showExplanation)}
+                className="flex items-center justify-center gap-1 text-sm text-amber-600 hover:text-amber-700 mb-4 mx-auto"
+              >
+                What does this mean?
+                {showExplanation ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              
+              {showExplanation && (
+                <Card variant="filled" padding="md" className="mb-6 text-left">
+                  <p className="text-amber-800 text-sm">
+                    You&apos;re teaching {dog?.name} that &quot;{selectedCue.name.toLowerCase()}&quot; doesn&apos;t always mean you&apos;re leaving. 
+                    Once {dog?.name} stays calm for this cue 5 times, it&apos;s mastered and you can move to the next challenge.
+                  </p>
+                  <p className="text-amber-800 text-sm mt-2">
+                    <strong>Remember:</strong> Only &quot;calm&quot; responses count toward mastery. Slight reactions and anxious responses help you understand where {dog?.name} needs more practice.
                   </p>
                 </Card>
               )}
 
+              {/* Suggestion if struggling */}
+              {consecutiveAnxious >= 2 && (
+                <Card variant="outlined" padding="md" className="mb-6 bg-blue-50 border-blue-200">
+                  <p className="text-blue-800 text-sm">
+                    <strong>💡 Tip:</strong> {dog?.name} seems to be struggling with this one. Try taking a break, or practice a different cue that&apos;s been going better.
+                  </p>
+                </Card>
+              )}
+
+              {/* Buttons */}
               <div className="space-y-3">
                 <Button onClick={practiceAnother} fullWidth>
                   Practice Another Cue
@@ -393,43 +449,32 @@ export default function DeparturePracticePage() {
         <main className="px-4 py-6">
           <div className="max-w-lg mx-auto space-y-6">
             
+            {/* Current cue */}
             <Card variant="elevated" padding="lg" className="text-center">
               <span className="text-5xl mb-4 block">🔑</span>
               <h2 className="text-xl font-bold text-gray-900 mb-2">{selectedCue.name}</h2>
+              
+              {/* Show current progress */}
+              <div className="mb-4">
+                <ProgressDots current={selectedCue.calmCount} />
+                <p className="text-sm text-gray-500 mt-2">
+                  {selectedCue.calmCount} of 5 calm responses
+                </p>
+              </div>
+
               <p className="text-gray-600">
-                Perform this action, then record how {dog?.name} reacted.
+                Do this action, then tell us how {dog?.name} reacted.
               </p>
             </Card>
 
-            <Card variant="filled" padding="md" className="bg-blue-50">
-              <h3 className="font-semibold text-blue-900 mb-2">📋 How to Practice</h3>
-              <ol className="text-blue-800 text-sm space-y-2">
-                <li>1. Make sure {dog?.name} can see you</li>
-                <li>2. Calmly perform the action: <strong>{selectedCue.name.toLowerCase()}</strong></li>
-                <li>3. Watch {dog?.name}&apos;s reaction for 5-10 seconds</li>
-                <li>4. Record the response below</li>
-                <li>5. <strong>Don&apos;t leave!</strong> This is just practice</li>
-              </ol>
+            {/* Quick instructions */}
+            <Card variant="filled" padding="md" className="bg-amber-50">
+              <p className="text-amber-800 text-sm">
+                <strong>Quick tip:</strong> Do the action calmly, watch {dog?.name} for 5-10 seconds, then record the response. Don&apos;t actually leave!
+              </p>
             </Card>
 
-            <Card variant="outlined" padding="md">
-              <h3 className="font-semibold text-gray-900 mb-3">👀 What to Watch For</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-start gap-2">
-                  <span className="text-green-500">✓</span>
-                  <p className="text-gray-700"><strong>Calm:</strong> Relaxed body, no change in behavior</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-500">~</span>
-                  <p className="text-gray-700"><strong>Slight reaction:</strong> Ears perk up, watches you, but settles</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-red-500">!</span>
-                  <p className="text-gray-700"><strong>Anxious:</strong> Gets up, follows you, whines, paces</p>
-                </div>
-              </div>
-            </Card>
-
+            {/* Response buttons */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
                 How did {dog?.name} react?
@@ -469,13 +514,6 @@ export default function DeparturePracticePage() {
                 </button>
               </div>
             </div>
-
-            <Card variant="filled" padding="md">
-              <p className="text-amber-800 text-sm">
-                <strong>💡 Tip:</strong> If {dog?.name} is anxious, that&apos;s valuable information! 
-                Try doing it more casually next time, or pair it with treats.
-              </p>
-            </Card>
 
           </div>
         </main>

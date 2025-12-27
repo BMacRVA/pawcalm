@@ -8,10 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-"test:watch": "vitest",
-"test:coverage": "vitest run --coverage"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@mux/mux-node": "^12.8.1",
     "@supabase/supabase-js": "^2.89.0",

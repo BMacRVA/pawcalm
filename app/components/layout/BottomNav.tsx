@@ -1,60 +1,46 @@
-'use client';
+'use client'
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Home, TrendingUp, Settings, BookOpen } from 'lucide-react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Home, TrendingUp, MessageCircle, Settings } from 'lucide-react'
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  matchPaths?: string[];
-}
-
-const NAV_ITEMS = [
+const navItems = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/progress', label: 'Progress', icon: TrendingUp },
-  { href: '/journal', label: 'Journal', icon: BookOpen },
+  { href: '/journal', label: 'Coach', icon: MessageCircle },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export function BottomNav() {
-  const pathname = usePathname();
-
-  const isActive = (item: NavItem) => {
-    if (pathname === item.href) return true;
-    if (pathname.startsWith(item.href + '/')) return true;
-    if (item.matchPaths?.some(path => pathname.startsWith(path))) return true;
-    return false;
-  };
+  const pathname = usePathname()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-150 ${
-                active ? 'text-amber-600' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Icon className={`w-6 h-6 mb-1 transition-transform duration-150 ${active ? 'scale-110' : ''}`} />
-              <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
-            </Link>
-          );
-        })}
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+      <div className="max-w-lg mx-auto px-6 py-2">
+        <div className="flex items-center justify-around">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const isActive = pathname === href
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex flex-col items-center py-2 px-3 rounded-lg transition ${
+                  isActive
+                    ? 'text-amber-600'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                <Icon className="w-6 h-6" />
+                <span className="text-xs mt-1 font-medium">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </div>
     </nav>
-  );
+  )
 }
 
 export function BottomNavSpacer() {
-  return <div className="h-20 pb-[env(safe-area-inset-bottom)]" />;
+  return <div className="h-20" />
 }
-
-export default BottomNav;
