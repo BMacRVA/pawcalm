@@ -11,12 +11,62 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Simple in-memory rate limiting
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+
+function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
+  const now = Date.now()
+  const windowMs = 60 * 1000 // 1 minute window
+  const maxRequests = 10 // 10 requests per minute
+
+  const userLimit = rateLimitMap.get(userId)
+
+  if (!userLimit || now > userLimit.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + windowMs })
+    return { allowed: true, remaining: maxRequests - 1 }
+  }
+
+  if (userLimit.count >= maxRequests) {
+    return { allowed: false, remaining: 0 }
+  }
+
+  userLimit.count++
+  return { allowed: true, remaining: maxRequests - userLimit.count }
+}
+
+// Clean up old entries periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, value] of rateLimitMap.entries()) {
+    if (now > value.resetTime) {
+      rateLimitMap.delete(key)
+    }
+  }
+}, 60 * 1000)
+
 export async function POST(request: NextRequest) {
   try {
     const { dogId, message, userId } = await request.json()
 
     if (!dogId || !message) {
       return NextResponse.json({ error: 'Missing dogId or message' }, { status: 400 })
+    }
+
+    // Rate limit check
+    const rateLimitKey = userId || dogId || 'anonymous'
+    const { allowed, remaining } = checkRateLimit(rateLimitKey)
+    
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a minute before sending more messages.' },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Remaining': '0',
+            'Retry-After': '60'
+          }
+        }
+      )
     }
 
     // Fetch dog info
@@ -248,7 +298,10 @@ USE THEIR DATA: You have detailed stats about ${dog.name}. Reference specific cu
       mood: 'neutral',
     })
 
-    return NextResponse.json({ response: aiResponse })
+    return NextResponse.json({ 
+      response: aiResponse,
+      rateLimit: { remaining }
+    })
 
   } catch (error) {
     console.error('Journal chat error:', error)
