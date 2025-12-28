@@ -258,6 +258,20 @@ export default function DashboardPage() {
         </button>
 
         <button
+          onClick={() => router.push('/videos')}
+          className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center justify-between hover:shadow-md transition mt-3"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎬</span>
+            <div className="text-left">
+              <p className="font-medium text-gray-900">Video Check-in</p>
+              <p className="text-sm text-gray-500">See how {dog.name} does alone</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400" />
+        </button>
+
+        <button
           onClick={() => router.push('/journal')}
           className="w-full bg-white rounded-xl p-4 shadow-sm flex items-center justify-between hover:shadow-md transition mt-3"
         >
