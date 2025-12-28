@@ -36,6 +36,14 @@ export type ProgressData = {
     currentCalmRate: number
     practiceCount: number
   }
+  // Video analysis data
+  videoData?: {
+    totalVideos: number
+    firstVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+    latestVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+    hasImprovedOnVideo: boolean
+    firstCalmVideoDate: string | null
+  }
 }
 
 export type ProgressInsight = {
@@ -66,6 +74,24 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
 
   const thisWeekPositiveRate = thisWeekTotal > 0 ? thisWeekPositive / thisWeekTotal : 0
   const lastWeekPositiveRate = lastWeekTotal > 0 ? lastWeekPositive / lastWeekTotal : 0
+
+  // Priority 0: Video shows real improvement - this is the strongest proof
+  if (data.videoData?.hasImprovedOnVideo && data.videoData.firstVideoLevel && data.videoData.latestVideoLevel) {
+    return {
+      message: `Video proof: ${dogName} went from ${data.videoData.firstVideoLevel} to ${data.videoData.latestVideoLevel} anxiety when actually alone. This is real.`,
+      emoji: '🎬',
+      type: 'proof'
+    }
+  }
+
+  // Priority 0.5: First calm video - huge milestone
+  if (data.videoData?.latestVideoLevel === 'Calm' && data.videoData.totalVideos <= 2) {
+    return {
+      message: `${dogName} was calm in your video check-in! That's the real test - and ${dogName} passed.`,
+      emoji: '🎉',
+      type: 'celebration'
+    }
+  }
 
   // Priority 1: Show proof when there's clear improvement from start
   if (data.daysSinceStart >= 7 && firstWeekResponseTotal >= 3 && thisWeekResponseTotal >= 3) {

@@ -74,6 +74,57 @@ export default function ProgressInsightCard({ dogId, dogName }: ProgressInsightC
       .select('id, name, calm_count, total_practices')
       .eq('dog_id', dogId)
 
+    // Get video analyses for video-based insights
+    const { data: videoAnalyses } = await supabase
+      .from('video_analyses')
+      .select('id, analysis, status, created_at')
+      .eq('dog_id', dogId)
+      .eq('status', 'analyzed')
+      .order('created_at', { ascending: true })
+
+    // Process video data
+    let videoInsightData: {
+      totalVideos: number
+      firstVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+      latestVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+      hasImprovedOnVideo: boolean
+      firstCalmVideoDate: string | null
+    } | undefined = undefined
+
+    if (videoAnalyses && videoAnalyses.length > 0) {
+      const getAnxietyLevel = (analysis: string): 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null => {
+        const lower = analysis.toLowerCase()
+        if (lower.includes('none 😎') || lower.includes('level: none')) return 'Calm'
+        if (lower.includes('mild 😊') || lower.includes('level: mild')) return 'Mild'
+        if (lower.includes('moderate 😟') || lower.includes('level: moderate')) return 'Moderate'
+        if (lower.includes('severe 😰') || lower.includes('level: severe')) return 'Severe'
+        return null
+      }
+
+      const anxietyScore = (level: string | null): number => {
+        if (level === 'Calm') return 0
+        if (level === 'Mild') return 1
+        if (level === 'Moderate') return 2
+        if (level === 'Severe') return 3
+        return 1
+      }
+
+      const firstVideo = videoAnalyses[0]
+      const latestVideo = videoAnalyses[videoAnalyses.length - 1]
+      const firstLevel = firstVideo?.analysis ? getAnxietyLevel(firstVideo.analysis) : null
+      const latestLevel = latestVideo?.analysis ? getAnxietyLevel(latestVideo.analysis) : null
+
+      const firstCalmVideo = videoAnalyses.find(v => v.analysis && getAnxietyLevel(v.analysis) === 'Calm')
+
+      videoInsightData = {
+        totalVideos: videoAnalyses.length,
+        firstVideoLevel: firstLevel,
+        latestVideoLevel: latestLevel,
+        hasImprovedOnVideo: firstLevel && latestLevel ? anxietyScore(latestLevel) < anxietyScore(firstLevel) : false,
+        firstCalmVideoDate: firstCalmVideo?.created_at || null
+      }
+    }
+
     // Calculate best cue improvement
     let bestCueImprovement: {
       name: string
@@ -213,6 +264,7 @@ export default function ProgressInsightCard({ dogId, dogName }: ProgressInsightC
       isFirstGreatEver,
       totalPractices,
       bestCueImprovement,
+      videoData: videoInsightData,
     }
 
     const insight = getProgressInsight(progressData, dogName)

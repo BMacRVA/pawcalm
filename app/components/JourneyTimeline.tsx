@@ -11,6 +11,8 @@ type MilestoneType =
   | 'first_absence' 
   | 'absence_milestone'
   | 'week_complete'
+  | 'celebration'
+  | 'video'
 
 type Milestone = {
   id: string
@@ -135,6 +137,72 @@ export default function JourneyTimeline({ dogId, dogName }: JourneyTimelineProps
         date: new Date(longestAbsence.created_at),
         emoji: '⭐'
       })
+    }
+
+    // 5.5. Get video milestones
+    const { data: videoAnalyses } = await supabase
+      .from('video_analyses')
+      .select('id, analysis, status, created_at')
+      .eq('dog_id', dogId)
+      .eq('status', 'analyzed')
+      .order('created_at', { ascending: true })
+
+    if (videoAnalyses && videoAnalyses.length > 0) {
+      // First video uploaded
+      allMilestones.push({
+        id: 'first-video',
+        type: 'first_absence',
+        title: 'First video check-in!',
+        date: new Date(videoAnalyses[0].created_at),
+        emoji: '🎬'
+      })
+
+      // First calm video
+      const getAnxietyLevel = (analysis: string): string | null => {
+        const lower = analysis.toLowerCase()
+        if (lower.includes('none 😎') || lower.includes('level: none')) return 'Calm'
+        if (lower.includes('mild 😊') || lower.includes('level: mild')) return 'Mild'
+        if (lower.includes('moderate 😟') || lower.includes('level: moderate')) return 'Moderate'
+        if (lower.includes('severe 😰') || lower.includes('level: severe')) return 'Severe'
+        return null
+      }
+
+      const firstCalmVideo = videoAnalyses.find(v => v.analysis && getAnxietyLevel(v.analysis) === 'Calm')
+      if (firstCalmVideo) {
+        allMilestones.push({
+          id: 'first-calm-video',
+          type: 'celebration',
+          title: 'First calm video! 🎉',
+          date: new Date(firstCalmVideo.created_at),
+          emoji: '😎'
+        })
+      }
+
+      // Video improvement milestone
+      if (videoAnalyses.length >= 2) {
+        const anxietyScore = (level: string | null): number => {
+          if (level === 'Calm') return 0
+          if (level === 'Mild') return 1
+          if (level === 'Moderate') return 2
+          if (level === 'Severe') return 3
+          return 1
+        }
+        
+        const firstLevel = videoAnalyses[0].analysis ? getAnxietyLevel(videoAnalyses[0].analysis) : null
+        const latestLevel = videoAnalyses[videoAnalyses.length - 1].analysis 
+          ? getAnxietyLevel(videoAnalyses[videoAnalyses.length - 1].analysis) 
+          : null
+        
+        if (firstLevel && latestLevel && anxietyScore(latestLevel) < anxietyScore(firstLevel)) {
+          allMilestones.push({
+            id: 'video-improvement',
+            type: 'celebration',
+            title: `Video: ${firstLevel} → ${latestLevel}`,
+            date: new Date(videoAnalyses[videoAnalyses.length - 1].created_at),
+            emoji: '📈'
+          })
+        }
+      }
     }
 
     // 6. Check for streak milestones (7 days, 14 days, 30 days)
