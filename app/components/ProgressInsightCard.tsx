@@ -75,7 +75,12 @@ export default function ProgressInsightCard({ dogId, dogName }: ProgressInsightC
       .eq('dog_id', dogId)
 
     // Calculate best cue improvement
-    let bestCueImprovement: ProgressData['bestCueImprovement'] = undefined
+    let bestCueImprovement: {
+      name: string
+      startCalmRate: number
+      currentCalmRate: number
+      practiceCount: number
+    } | undefined = undefined
     if (cuesData && allPractices) {
       for (const cue of cuesData) {
         if ((cue.total_practices || 0) < 5) continue
