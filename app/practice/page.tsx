@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { Button } from '../components/ui/Button'
+import SessionRating from '../components/SessionRating'
 import { Loader2, Home } from 'lucide-react'
 
 type Cue = {
@@ -21,6 +22,7 @@ type Cue = {
 }
 
 type Response = 'calm' | 'noticed' | 'anxious'
+type Rating = 'tough' | 'okay' | 'good' | 'great'
 
 // Smart cue selection algorithm
 function selectNextCue(cues: Cue[], todaysPractices: string[], specificCueId?: string): Cue | null {
@@ -109,7 +111,9 @@ function PracticeContent() {
   const [currentCue, setCurrentCue] = useState<Cue | null>(null)
   const [loading, setLoading] = useState(true)
   const [showResult, setShowResult] = useState(false)
+  const [showRating, setShowRating] = useState(false)
   const [lastResponse, setLastResponse] = useState<Response | null>(null)
+  const [lastPracticeId, setLastPracticeId] = useState<string | null>(null)
   const [todaysPractices, setTodaysPractices] = useState<string[]>([])
   const [todaysGoal, setTodaysGoal] = useState(3)
   const [todaysCount, setTodaysCount] = useState(0)
@@ -282,21 +286,28 @@ function PracticeContent() {
     if (!dog || !currentCue) return
 
     setLastResponse(response)
-    setShowResult(true)
 
     const now = new Date()
 
-    // Log the practice
-    await supabase.from('cue_practices').insert({
-      dog_id: dog.id,
-      cues: [{
-        cue_id: currentCue.id,
-        cue_name: currentCue.name,
-        response: response,
-      }],
-      time_of_day: getTimeOfDay(),
-      day_of_week: now.getDay(),
-    })
+    // Log the practice and get the ID back
+    const { data: practiceData } = await supabase
+      .from('cue_practices')
+      .insert({
+        dog_id: dog.id,
+        cues: [{
+          cue_id: currentCue.id,
+          cue_name: currentCue.name,
+          response: response,
+        }],
+        time_of_day: getTimeOfDay(),
+        day_of_week: now.getDay(),
+      })
+      .select('id')
+      .single()
+
+    if (practiceData) {
+      setLastPracticeId(practiceData.id)
+    }
 
     // Update cue stats
     const newCalmCount = currentCue.calmCount + (response === 'calm' ? 1 : 0)
@@ -313,11 +324,36 @@ function PracticeContent() {
     // Update local state
     setTodaysCount(prev => prev + 1)
     setTodaysPractices(prev => [...prev, currentCue.id])
+    
+    // Show rating immediately after response
+    setShowRating(true)
+  }
+
+  const handleRating = async (rating: Rating) => {
+    if (lastPracticeId) {
+      await supabase
+        .from('cue_practices')
+        .update({ session_rating: rating })
+        .eq('id', lastPracticeId)
+    }
+    
+    // Small delay so user sees their selection, then show result
+    setTimeout(() => {
+      setShowRating(false)
+      setShowResult(true)
+    }, 300)
+  }
+
+  const skipRating = () => {
+    setShowRating(false)
+    setShowResult(true)
   }
 
   const nextCue = async () => {
     setShowResult(false)
+    setShowRating(false)
     setLastResponse(null)
+    setLastPracticeId(null)
     setWantMore(true)
     
     // Clear specific cue param for next selection
@@ -388,7 +424,37 @@ function PracticeContent() {
     )
   }
 
-  // Show result
+  // Show rating screen immediately after logging response
+  if (showRating && currentCue) {
+    const getResultEmoji = () => {
+      if (lastResponse === 'calm') return '🎉'
+      if (lastResponse === 'noticed') return '👍'
+      return '💪'
+    }
+
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
+        <main className="flex-1 flex flex-col items-center justify-center px-6">
+          <span className="text-5xl mb-4">{getResultEmoji()}</span>
+          <h2 className="text-lg font-semibold text-gray-700 mb-6">Nice work!</h2>
+          
+          <SessionRating 
+            onRate={handleRating} 
+            dogName={dog?.name}
+          />
+          
+          <button 
+            onClick={skipRating}
+            className="mt-6 text-gray-400 text-sm hover:text-gray-600"
+          >
+            Skip
+          </button>
+        </main>
+      </div>
+    )
+  }
+
+  // Show result screen with Next/Done buttons
   if (showResult && currentCue) {
     const remaining = todaysGoal - todaysCount
     const hitGoal = todaysCount >= todaysGoal

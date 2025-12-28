@@ -6,9 +6,11 @@ import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import { Button } from '../components/ui/Button'
-import { ArrowLeft, Clock, Play, CheckCircle, XCircle, AlertCircle, Timer, ChevronRight } from 'lucide-react'
+import SessionRating from '../components/SessionRating'
+import { ArrowLeft, Clock, Play, CheckCircle, XCircle, AlertCircle, Timer } from 'lucide-react'
 
-type SessionState = 'intro' | 'prepare' | 'timing' | 'result' | 'history'
+type SessionState = 'intro' | 'prepare' | 'timing' | 'result' | 'rating' | 'result_summary' | 'history'
+type Rating = 'tough' | 'okay' | 'good' | 'great'
 
 type PastSession = {
   id: string
@@ -28,6 +30,8 @@ export default function AbsencePracticePage() {
   const [pastSessions, setPastSessions] = useState<PastSession[]>([])
   const [loading, setLoading] = useState(true)
   const [longestCalm, setLongestCalm] = useState(0)
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null)
+  const [lastResponse, setLastResponse] = useState<'calm' | 'slight' | 'anxious' | null>(null)
 
   useEffect(() => {
     loadHistory()
@@ -92,18 +96,50 @@ export default function AbsencePracticePage() {
   const logResponse = async (response: 'calm' | 'slight' | 'anxious') => {
     if (!dog) return
 
-    await supabase.from('absence_sessions').insert({
-      dog_id: dog.id,
-      duration: elapsedTime,
-      response: response,
-      target_duration: targetDuration,
-    })
+    setLastResponse(response)
 
-    // Reload history
+    const { data: sessionData } = await supabase
+      .from('absence_sessions')
+      .insert({
+        dog_id: dog.id,
+        duration: elapsedTime,
+        response: response,
+        target_duration: targetDuration,
+      })
+      .select('id')
+      .single()
+
+    if (sessionData) {
+      setLastSessionId(sessionData.id)
+    }
+
+    // Show rating immediately after response
+    setState('rating')
+  }
+
+  const handleRating = async (rating: Rating) => {
+    if (lastSessionId) {
+      await supabase
+        .from('absence_sessions')
+        .update({ session_rating: rating })
+        .eq('id', lastSessionId)
+    }
+
+    // Small delay so user sees their selection, then show result
+    setTimeout(() => {
+      setState('result_summary')
+    }, 300)
+  }
+
+  const skipRating = () => {
+    setState('result_summary')
+  }
+
+  const finishSession = async () => {
     await loadHistory()
-
-    // Reset for next session or go back to intro
     setElapsedTime(0)
+    setLastSessionId(null)
+    setLastResponse(null)
     setState('intro')
   }
 
@@ -143,6 +179,12 @@ export default function AbsencePracticePage() {
     return options
   }
 
+  const getResultEmoji = () => {
+    if (lastResponse === 'calm') return '🎉'
+    if (lastResponse === 'slight') return '👍'
+    return '💪'
+  }
+
   if (dogLoading || loading) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
@@ -150,6 +192,83 @@ export default function AbsencePracticePage() {
           <div className="w-12 h-12 rounded-full bg-purple-200" />
           <div className="h-4 w-24 bg-purple-200 rounded" />
         </div>
+      </div>
+    )
+  }
+
+  // Rating State - after logging response
+  if (state === 'rating') {
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
+        <main className="flex-1 flex flex-col items-center justify-center px-6">
+          <span className="text-5xl mb-4">{getResultEmoji()}</span>
+          <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            {lastResponse === 'calm' ? 'Great session!' : 
+             lastResponse === 'slight' ? 'Good effort!' : 
+             'Every session counts!'}
+          </h2>
+          <p className="text-gray-500 text-sm mb-6">
+            {formatDuration(elapsedTime)} completed
+          </p>
+          
+          <SessionRating 
+            onRate={handleRating} 
+            dogName={dog?.name}
+          />
+          
+          <button 
+            onClick={skipRating}
+            className="mt-6 text-gray-400 text-sm hover:text-gray-600"
+          >
+            Skip
+          </button>
+        </main>
+      </div>
+    )
+  }
+
+  // Result Summary State - after rating, shows summary with next steps
+  if (state === 'result_summary') {
+    const getResultMessage = () => {
+      if (lastResponse === 'calm') {
+        return `${dog?.name} handled it beautifully!`
+      }
+      if (lastResponse === 'slight') {
+        return `${dog?.name} is making progress!`
+      }
+      return `We'll try a shorter duration next time`
+    }
+
+    const getResultTip = () => {
+      if (lastResponse === 'calm') {
+        return `Try a slightly longer session next time to keep building confidence.`
+      }
+      if (lastResponse === 'slight') {
+        return `A slight reaction is normal. Try the same duration again to build consistency.`
+      }
+      return `Shorter, successful sessions are better than long stressful ones. We'll adjust.`
+    }
+
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
+        <main className="flex-1 flex flex-col items-center justify-center px-6">
+          <span className="text-6xl mb-6">{getResultEmoji()}</span>
+          <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">
+            {getResultMessage()}
+          </h1>
+          <p className="text-gray-500 text-center mb-2">
+            {formatDuration(elapsedTime)} session completed
+          </p>
+          <p className="text-gray-400 text-center mb-8 max-w-xs">
+            {getResultTip()}
+          </p>
+          
+          <div className="w-full max-w-xs space-y-3">
+            <Button onClick={finishSession} fullWidth size="lg" className="bg-purple-600 hover:bg-purple-700">
+              Done
+            </Button>
+          </div>
+        </main>
       </div>
     )
   }

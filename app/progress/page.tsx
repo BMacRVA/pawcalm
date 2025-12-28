@@ -6,6 +6,8 @@ import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import { Button } from '../components/ui/Button'
+import JourneyTimeline from '../components/JourneyTimeline'
+import YourImpactCard from '../components/YourImpactCard'
 import { Loader2, Plus, Lock, Play } from 'lucide-react'
 
 type CueProgress = {
@@ -196,6 +198,16 @@ export default function ProgressPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Your Impact - Before/After Proof */}
+      <div className="px-6 mb-6">
+        <YourImpactCard dogId={dog?.id || ''} dogName={dog?.name || ''} />
+      </div>
+
+      {/* Journey Timeline */}
+      <div className="px-6 mb-6">
+        <JourneyTimeline dogId={dog?.id || ''} dogName={dog?.name || ''} />
       </div>
 
       {/* Level 1: Departure Cues */}

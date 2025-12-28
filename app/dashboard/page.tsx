@@ -6,6 +6,7 @@ import { supabase } from '../supabase'
 import { useSelectedDog } from '../hooks/useSelectedDog'
 import { Button } from '../components/ui/Button'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
+import ProgressInsightCard from '../components/ProgressInsightCard'
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -186,6 +187,11 @@ export default function DashboardPage() {
           </div>
         )}
       </header>
+
+      {/* Progress Insight - Smart motivational message */}
+      <div className="px-6 mb-4">
+        <ProgressInsightCard dogId={dog.id} dogName={dog.name} />
+      </div>
 
       {/* Today's Status */}
       <div className="px-6 mb-6">
