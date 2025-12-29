@@ -1,40 +1,32 @@
 // Progress Insights - Generates contextual, motivational messages based on owner's data
 
 export type ProgressData = {
-  // Session ratings from this week
   thisWeekRatings: ('tough' | 'okay' | 'good' | 'great')[]
-  // Session ratings from last week
   lastWeekRatings: ('tough' | 'okay' | 'good' | 'great')[]
-  // Dog responses this week
   thisWeekResponses: ('calm' | 'noticed' | 'anxious')[]
-  // Dog responses last week
   lastWeekResponses: ('calm' | 'noticed' | 'anxious')[]
-  // Dog responses from first week
   firstWeekResponses: ('calm' | 'noticed' | 'anxious')[]
-  // Current streak
   currentStreak: number
-  // Longest streak ever
   longestStreak: number
-  // Total sessions ever
   totalSessions: number
-  // Cues mastered
   cuesMastered: number
-  // Total cues
   totalCues: number
-  // Days since first practice
   daysSinceStart: number
-  // Had a 'great' rating this week
   hadGreatThisWeek: boolean
-  // First 'great' rating ever
   isFirstGreatEver: boolean
-  // Total practices count
   totalPractices: number
-  // Best cue improvement (name and percentage points gained)
   bestCueImprovement?: {
     name: string
     startCalmRate: number
     currentCalmRate: number
     practiceCount: number
+  }
+  videoData?: {
+    totalVideos: number
+    firstVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+    latestVideoLevel: 'Calm' | 'Mild' | 'Moderate' | 'Severe' | null
+    hasImprovedOnVideo: boolean
+    firstCalmVideoDate: string | null
   }
 }
 
@@ -45,8 +37,6 @@ export type ProgressInsight = {
 }
 
 export function getProgressInsight(data: ProgressData, dogName: string): ProgressInsight {
-  
-  // Calculate trends
   const thisWeekPositive = data.thisWeekRatings.filter(r => r === 'good' || r === 'great').length
   const lastWeekPositive = data.lastWeekRatings.filter(r => r === 'good' || r === 'great').length
   const thisWeekTotal = data.thisWeekRatings.length
@@ -67,7 +57,22 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
   const thisWeekPositiveRate = thisWeekTotal > 0 ? thisWeekPositive / thisWeekTotal : 0
   const lastWeekPositiveRate = lastWeekTotal > 0 ? lastWeekPositive / lastWeekTotal : 0
 
-  // Priority 1: Show proof when there's clear improvement from start
+  if (data.videoData?.hasImprovedOnVideo && data.videoData.firstVideoLevel && data.videoData.latestVideoLevel) {
+    return {
+      message: `Video proof: ${dogName} went from ${data.videoData.firstVideoLevel} to ${data.videoData.latestVideoLevel} anxiety when actually alone. This is real.`,
+      emoji: '🎬',
+      type: 'proof'
+    }
+  }
+
+  if (data.videoData?.latestVideoLevel === 'Calm' && data.videoData.totalVideos <= 2) {
+    return {
+      message: `${dogName} was calm in your video check-in! That's the real test - and ${dogName} passed.`,
+      emoji: '🎉',
+      type: 'celebration'
+    }
+  }
+
   if (data.daysSinceStart >= 7 && firstWeekResponseTotal >= 3 && thisWeekResponseTotal >= 3) {
     const improvementFromStart = Math.round((thisWeekCalmRate - firstWeekCalmRate) * 100)
     if (improvementFromStart >= 15) {
@@ -79,7 +84,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 2: Show specific cue improvement as proof
   if (data.bestCueImprovement && data.bestCueImprovement.practiceCount >= 5) {
     const improvement = data.bestCueImprovement.currentCalmRate - data.bestCueImprovement.startCalmRate
     if (improvement >= 20) {
@@ -91,7 +95,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 3: Connect practice count to outcomes
   if (data.totalPractices >= 20 && thisWeekCalmRate >= 0.6) {
     return {
       message: `${data.totalPractices} practices in, and ${Math.round(thisWeekCalmRate * 100)}% calm this week. The method is working.`,
@@ -100,7 +103,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 4: First-time celebrations
   if (data.isFirstGreatEver && data.hadGreatThisWeek) {
     return {
       message: `Your first "great" session! That feeling is real progress.`,
@@ -109,7 +111,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 5: Streak milestones with method validation
   if (data.currentStreak >= 7) {
     return {
       message: `${data.currentStreak} days consistent. Research shows this is when dogs start to generalize - keep going.`,
@@ -126,7 +127,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 6: Mastery celebration with validation
   if (data.cuesMastered > 0 && data.cuesMastered === data.totalCues) {
     return {
       message: `All ${data.totalCues} cues mastered. ${dogName}'s nervous system is learning departure = safe.`,
@@ -135,7 +135,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 7: Week-over-week dog improvement
   if (thisWeekResponseTotal >= 3 && lastWeekResponseTotal >= 3) {
     const weekOverWeekImprovement = Math.round((thisWeekCalmRate - lastWeekCalmRate) * 100)
     if (weekOverWeekImprovement >= 10) {
@@ -147,7 +146,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 8: Sessions feeling easier (owner experience improving)
   if (thisWeekTotal >= 3 && lastWeekTotal >= 3) {
     if (thisWeekPositiveRate > lastWeekPositiveRate + 0.15) {
       return {
@@ -158,7 +156,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 9: Validate the method for newer users
   if (data.totalSessions >= 5 && data.totalSessions < 15 && data.currentStreak >= 2) {
     return {
       message: `${data.totalSessions} sessions done. You're building the foundation - this is exactly how it works.`,
@@ -167,7 +164,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 10: Tough week but still showing up
   if (thisWeekTotal >= 3) {
     const thisWeekTough = data.thisWeekRatings.filter(r => r === 'tough').length
     if (thisWeekTough >= thisWeekTotal * 0.5) {
@@ -179,7 +175,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 11: Good week acknowledgment with validation
   if (thisWeekTotal >= 3 && thisWeekPositiveRate >= 0.6) {
     return {
       message: `Most sessions felt good this week. That's a sign you and ${dogName} are in sync.`,
@@ -188,7 +183,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 12: New user encouragement with expectation setting
   if (data.totalSessions < 10) {
     return {
       message: `You're building a foundation. Most dogs show real progress after 2-3 weeks of daily practice.`,
@@ -197,7 +191,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 13: Streak encouragement with science
   if (data.currentStreak >= 3) {
     return {
       message: `${data.currentStreak} days in a row. ${dogName}'s brain is rewiring - each rep makes "alone" feel safer.`,
@@ -206,7 +199,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Priority 14: General progress with validation
   if (data.cuesMastered > 0) {
     return {
       message: `${data.cuesMastered} cue${data.cuesMastered > 1 ? 's' : ''} mastered means ${data.cuesMastered} trigger${data.cuesMastered > 1 ? 's' : ''} that no longer scare ${dogName}.`,
@@ -215,7 +207,6 @@ export function getProgressInsight(data: ProgressData, dogName: string): Progres
     }
   }
 
-  // Default: Method validation
   return {
     message: `Every calm rep teaches ${dogName} that departure cues aren't scary. Keep going.`,
     emoji: '🐕',
