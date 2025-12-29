@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
-import { TrendingUp, TrendingDown, Minus, CheckCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, CheckCircle, Info } from 'lucide-react'
 
 interface CueProgress {
   name: string
@@ -18,6 +18,8 @@ interface ImpactData {
   totalPractices: number
   daysSinceStart: number
   topCue: CueProgress | null
+  dataQuality: 'early' | 'building' | 'solid'
+  comparisonSize: number
   isFollowingMethod: {
     dailyPractice: boolean
     gradualProgress: boolean
@@ -33,6 +35,7 @@ interface YourImpactCardProps {
 export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) {
   const [data, setData] = useState<ImpactData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showExplainer, setShowExplainer] = useState(false)
 
   useEffect(() => {
     loadImpactData()
@@ -50,9 +53,9 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
       .eq('dog_id', dogId)
       .order('created_at', { ascending: true })
 
-    if (!allPractices || allPractices.length < 3) {
+    if (!allPractices || allPractices.length < 1) {
       setLoading(false)
-      return // Not enough data
+      return
     }
 
     // Get cues data
@@ -65,52 +68,52 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
     const firstPractice = new Date(allPractices[0].created_at)
     const daysSinceStart = Math.floor((now.getTime() - firstPractice.getTime()) / (1000 * 60 * 60 * 24))
 
-    // Get first week responses
-    const endOfFirstWeek = new Date(firstPractice)
-    endOfFirstWeek.setDate(endOfFirstWeek.getDate() + 7)
-    
-    const firstWeekResponses: string[] = []
-    const recentResponses: string[] = []
-    
+    // Collect ALL responses in order
+    const allResponses: string[] = []
     allPractices.forEach(p => {
-      const practiceDate = new Date(p.created_at)
       p.cues?.forEach((c: any) => {
         if (c.response) {
-          if (practiceDate < endOfFirstWeek) {
-            firstWeekResponses.push(c.response)
-          }
+          allResponses.push(c.response)
         }
       })
     })
 
-    // Get last 7 days responses
-    const sevenDaysAgo = new Date(now)
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    
-    allPractices.forEach(p => {
-      const practiceDate = new Date(p.created_at)
-      if (practiceDate >= sevenDaysAgo) {
-        p.cues?.forEach((c: any) => {
-          if (c.response) {
-            recentResponses.push(c.response)
-          }
-        })
-      }
-    })
+    const totalPractices = allResponses.length
 
-    const overallStartCalmRate = firstWeekResponses.length > 0 
-      ? Math.round((firstWeekResponses.filter(r => r === 'calm').length / firstWeekResponses.length) * 100)
+    // Determine comparison size and data quality based on total practices
+    let comparisonSize: number
+    let dataQuality: 'early' | 'building' | 'solid'
+
+    if (totalPractices < 6) {
+      // Not enough data yet
+      setData(null)
+      setLoading(false)
+      return
+    } else if (totalPractices <= 15) {
+      // Early results: compare first 3 vs last 3
+      comparisonSize = 3
+      dataQuality = 'early'
+    } else if (totalPractices <= 30) {
+      // Building picture: compare first 5 vs last 5
+      comparisonSize = 5
+      dataQuality = 'building'
+    } else {
+      // Solid data: compare first 20% vs last 20%
+      comparisonSize = Math.max(5, Math.floor(totalPractices * 0.2))
+      dataQuality = 'solid'
+    }
+
+    // Get start and current responses based on comparison size
+    const startResponses = allResponses.slice(0, comparisonSize)
+    const currentResponses = allResponses.slice(-comparisonSize)
+
+    const overallStartCalmRate = startResponses.length > 0 
+      ? Math.round((startResponses.filter(r => r === 'calm').length / startResponses.length) * 100)
       : 0
     
-    const overallCurrentCalmRate = recentResponses.length > 0
-      ? Math.round((recentResponses.filter(r => r === 'calm').length / recentResponses.length) * 100)
+    const overallCurrentCalmRate = currentResponses.length > 0
+      ? Math.round((currentResponses.filter(r => r === 'calm').length / currentResponses.length) * 100)
       : 0
-
-    // Calculate total practices
-    let totalPractices = 0
-    allPractices.forEach(p => {
-      totalPractices += (p.cues?.length || 0)
-    })
 
     // Find top improving cue
     let topCue: CueProgress | null = null
@@ -151,15 +154,14 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
     }
 
     // Check method adherence
-    // Daily practice: practiced in last 2 days
     const twoDaysAgo = new Date(now)
     twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
     const recentPractice = allPractices.some(p => new Date(p.created_at) >= twoDaysAgo)
 
-    // Gradual progress: has at least one mastered cue
     const hasMastered = (cuesData || []).some(c => (c.calm_count || 0) >= 5)
 
-    // Consistency: practiced at least 3 of last 7 days
+    const sevenDaysAgo = new Date(now)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     const lastSevenDays = new Set<string>()
     allPractices.forEach(p => {
       const practiceDate = new Date(p.created_at)
@@ -175,6 +177,8 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
       totalPractices,
       daysSinceStart,
       topCue,
+      dataQuality,
+      comparisonSize,
       isFollowingMethod: {
         dailyPractice: recentPractice,
         gradualProgress: hasMastered,
@@ -196,13 +200,36 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
     )
   }
 
-  if (!data || data.totalPractices < 5) {
-    return null // Not enough data to show impact
+  if (!data) {
+    return null
   }
 
   const overallChange = data.overallCurrentCalmRate - data.overallStartCalmRate
-  const TrendIcon = overallChange > 0 ? TrendingUp : overallChange < 0 ? TrendingDown : Minus
-  const trendColor = overallChange > 0 ? 'text-green-600' : overallChange < 0 ? 'text-red-500' : 'text-gray-500'
+  
+  // Determine visual treatment based on change
+  // Positive: green, celebratory
+  // Flat: gray, encouraging
+  // Negative: gray (not red), supportive
+  const isPositive = overallChange > 0
+  const isFlat = overallChange === 0
+  const isSmallDip = overallChange < 0 && overallChange > -10
+  const isBigDip = overallChange <= -10
+
+  const TrendIcon = isPositive ? TrendingUp : isFlat ? Minus : TrendingDown
+  const trendColor = isPositive ? 'text-green-600' : 'text-gray-500'
+  const barColor = isPositive ? 'bg-green-500' : 'bg-gray-300'
+
+  // Supportive message for different scenarios
+  let trendMessage = null
+  if (overallChange >= 10) {
+    trendMessage = 'Great progress!'
+  } else if (isFlat) {
+    trendMessage = 'Holding steady'
+  } else if (isSmallDip) {
+    trendMessage = 'Some fluctuation is normal'
+  } else if (isBigDip) {
+    trendMessage = 'Tough stretch — keep showing up'
+  }
 
   const methodChecks = [
     { label: 'Practicing regularly', done: data.isFollowingMethod.dailyPractice },
@@ -211,6 +238,19 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
   ]
 
   const allMethodsFollowed = methodChecks.every(m => m.done)
+
+  // Data quality labels
+  const qualityLabel = {
+    early: 'Early results',
+    building: 'Building picture',
+    solid: null // No label needed
+  }[data.dataQuality]
+
+  const explainerText = {
+    early: `Comparing your first ${data.comparisonSize} practices to your last ${data.comparisonSize}. Keep practicing for a clearer picture.`,
+    building: `Comparing your first ${data.comparisonSize} practices to your last ${data.comparisonSize}. The trend is becoming clearer.`,
+    solid: `Comparing your first ${data.comparisonSize} practices (20%) to your last ${data.comparisonSize} (20%). This is a reliable measure of ${dogName}'s progress.`
+  }[data.dataQuality]
 
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm">
@@ -221,7 +261,20 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
       {/* Overall before/after */}
       <div className="bg-gray-50 rounded-xl p-4 mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-600">Overall calm rate</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Overall calm rate</span>
+            {qualityLabel && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                {qualityLabel}
+              </span>
+            )}
+            <button 
+              onClick={() => setShowExplainer(!showExplainer)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <div className={`flex items-center gap-1 ${trendColor}`}>
             <TrendIcon className="w-4 h-4" />
             <span className="text-sm font-medium">
@@ -229,16 +282,24 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
             </span>
           </div>
         </div>
+        
+        {/* Explainer tooltip */}
+        {showExplainer && (
+          <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 text-xs text-gray-600">
+            <p>{explainerText}</p>
+          </div>
+        )}
+        
         <div className="flex items-center gap-4">
           <div className="text-center">
             <p className="text-2xl font-bold text-gray-400">{data.overallStartCalmRate}%</p>
-            <p className="text-xs text-gray-400">Week 1</p>
+            <p className="text-xs text-gray-400">Start</p>
           </div>
           <div className="flex-1 flex items-center">
             <div className="flex-1 h-1 bg-gray-200 rounded-full">
               <div 
-                className={`h-full rounded-full transition-all ${overallChange >= 0 ? 'bg-green-500' : 'bg-red-400'}`}
-                style={{ width: `${Math.min(100, Math.abs(overallChange) + 50)}%` }}
+                className={`h-full rounded-full transition-all ${barColor}`}
+                style={{ width: `${isPositive ? Math.min(100, overallChange + 50) : 50}%` }}
               />
             </div>
             <span className="mx-2 text-gray-400">→</span>
@@ -248,8 +309,16 @@ export default function YourImpactCard({ dogId, dogName }: YourImpactCardProps) 
             <p className="text-xs text-gray-500">Now</p>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          {data.totalPractices} practices over {data.daysSinceStart} days
+        
+        {/* Trend message */}
+        {trendMessage && (
+          <p className={`text-xs mt-2 text-center ${isPositive ? 'text-green-600' : 'text-gray-500'}`}>
+            {trendMessage}
+          </p>
+        )}
+        
+        <p className="text-xs text-gray-400 mt-1 text-center">
+          {data.totalPractices} practices over {data.daysSinceStart === 0 ? '1' : data.daysSinceStart} day{data.daysSinceStart !== 1 ? 's' : ''}
         </p>
       </div>
 
