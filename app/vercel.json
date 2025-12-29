@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/send-lifecycle-emails",
+      "schedule": "0 14 * * *"
+    }
+  ]
+}

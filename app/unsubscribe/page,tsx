@@ -1,0 +1,73 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { supabase } from '../supabase'
+
+export default function UnsubscribePage() {
+  const searchParams = useSearchParams()
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+
+  useEffect(() => {
+    const unsubscribe = async () => {
+      const userId = searchParams.get('uid')
+      
+      if (!userId) {
+        setStatus('error')
+        return
+      }
+
+      const { error } = await supabase
+        .from('email_preferences')
+        .upsert({
+          user_id: userId,
+          lifecycle_emails: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+
+      if (error) {
+        console.error('Unsubscribe error:', error)
+        setStatus('error')
+      } else {
+        setStatus('success')
+      }
+    }
+
+    unsubscribe()
+  }, [searchParams])
+
+  return (
+    <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl p-8 shadow-sm max-w-md text-center">
+        {status === 'loading' && (
+          <>
+            <p className="text-gray-600">Processing...</p>
+          </>
+        )}
+        
+        {status === 'success' && (
+          <>
+            <p className="text-4xl mb-4">✓</p>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">You've been unsubscribed</h1>
+            <p className="text-gray-600 mb-6">
+              You won't receive any more emails from PawCalm.
+            </p>
+            <p className="text-sm text-gray-500">
+              Changed your mind? You can re-enable emails in the app settings.
+            </p>
+          </>
+        )}
+        
+        {status === 'error' && (
+          <>
+            <p className="text-4xl mb-4">😕</p>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h1>
+            <p className="text-gray-600">
+              Please try again or email us at hello@pawcalm.ai
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
