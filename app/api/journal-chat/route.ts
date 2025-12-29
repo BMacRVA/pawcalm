@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch dog info
+    // Fetch dog info with all profile fields
     const { data: dog } = await supabase
       .from('dogs')
       .select('*')
@@ -201,6 +201,109 @@ export async function POST(request: NextRequest) {
       ? Math.floor((Date.now() - new Date(firstPractice).getTime()) / (1000 * 60 * 60 * 24))
       : 0
 
+    // Build profile context section
+    const buildProfileContext = () => {
+      const lines: string[] = []
+      
+      if (dog.is_rescue === true) {
+        lines.push(`🏠 ${dog.name} is a rescue dog`)
+      } else if (dog.is_rescue === false) {
+        lines.push(`🏠 ${dog.name} is not a rescue`)
+      }
+      
+      if (dog.anxiety_duration) {
+        const durationMap: Record<string, string> = {
+          'weeks': 'a few weeks',
+          'months': 'a few months',
+          '1-2 years': '1-2 years',
+          '2+ years': 'over 2 years',
+          'always': 'since they were adopted/bought'
+        }
+        lines.push(`⏱️ Has had separation anxiety for: ${durationMap[dog.anxiety_duration] || dog.anxiety_duration}`)
+      }
+      
+      if (dog.previous_training) {
+        const trainingMap: Record<string, string> = {
+          'none': 'No previous training attempted',
+          'youtube': 'Tried YouTube videos / online articles',
+          'trainer': 'Has worked with a trainer before',
+          'medication': 'Has tried medication only',
+          'multiple': 'Has tried multiple approaches'
+        }
+        lines.push(`📚 Previous training: ${trainingMap[dog.previous_training] || dog.previous_training}`)
+      }
+      
+      if (dog.living_situation) {
+        const livingMap: Record<string, string> = {
+          'apartment': 'Lives in an apartment/condo (neighbor noise may be a concern)',
+          'townhouse': 'Lives in a townhouse',
+          'house': 'Lives in a house'
+        }
+        lines.push(`🏡 ${livingMap[dog.living_situation] || dog.living_situation}`)
+      }
+      
+      if (dog.leave_duration) {
+        lines.push(`🎯 Goal: Be able to leave ${dog.name} alone for ${dog.leave_duration}`)
+      }
+      
+      if (dog.other_pets === true) {
+        lines.push(`🐾 Lives with other pets`)
+      } else if (dog.other_pets === false) {
+        lines.push(`🐾 Only pet in household`)
+      }
+      
+      if (dog.recent_changes && dog.recent_changes !== 'none') {
+        const changesMap: Record<string, string> = {
+          'move': 'Recently moved to a new home',
+          'schedule': "Owner's schedule recently changed",
+          'family': 'Recent family change (new baby, divorce, etc.)',
+          'loss': 'Recently lost a family member or pet',
+          'other': 'Other recent life changes'
+        }
+        lines.push(`⚠️ Recent change: ${changesMap[dog.recent_changes] || dog.recent_changes}`)
+      }
+      
+      return lines.length > 0 ? lines.join('\n') : 'No additional profile information yet'
+    }
+
+    // Build coaching hints based on profile
+    const buildCoachingHints = () => {
+      const hints: string[] = []
+      
+      if (dog.is_rescue) {
+        hints.push("- Rescue dogs often need extra patience. Their past is unknown, so emphasize that progress may be slower and that's okay.")
+      }
+      
+      if (dog.anxiety_duration === '2+ years' || dog.anxiety_duration === 'always') {
+        hints.push("- Long-term anxiety takes longer to resolve. Celebrate small wins extra hard. This is a marathon, not a sprint.")
+      }
+      
+      if (dog.previous_training === 'trainer') {
+        hints.push("- They've worked with a trainer before. Ask what worked/didn't work. Don't repeat failed approaches.")
+      } else if (dog.previous_training === 'multiple') {
+        hints.push("- They've tried multiple things. They may be frustrated. Emphasize that this structured approach is different.")
+      }
+      
+      if (dog.living_situation === 'apartment') {
+        hints.push("- Apartment living means neighbors might complain about barking. Be sensitive to this pressure. Suggest quiet hours practice.")
+      }
+      
+      if (dog.leave_duration) {
+        const currentMaxMinutes = totalCalm > 0 ? Math.min(totalCalm * 2, 30) : 0 // rough estimate
+        hints.push(`- Their goal is ${dog.leave_duration}. Help them see progress toward this specific goal.`)
+      }
+      
+      if (dog.recent_changes && dog.recent_changes !== 'none') {
+        hints.push("- Recent life changes can cause setbacks. Normalize regression and encourage patience during transitions.")
+      }
+      
+      if (dog.other_pets === false) {
+        hints.push("- Only pet means no companion when alone. The dog may feel more isolated.")
+      }
+      
+      return hints.length > 0 ? hints.join('\n') : 'No specific coaching hints'
+    }
+
     // Build comprehensive context
     const systemPrompt = `You are a supportive, knowledgeable dog separation anxiety coach inside the PawCalm app. You're texting with a dog owner who is working through separation anxiety training.
 
@@ -212,6 +315,8 @@ Breed: ${dog.breed || 'Not specified'}
 Age: ${dog.age || 'Not specified'}
 Anxiety Severity: ${dog.severity || 'moderate'}
 Training Started: ${daysSinceStart} days ago
+
+${buildProfileContext()}
 
 ═══════════════════════════════════════
 TRAINING STATISTICS
@@ -254,6 +359,11 @@ ${previousEntries?.slice(0, 5).map(e => {
 }).join('\n\n') || 'No previous conversations'}
 
 ═══════════════════════════════════════
+COACHING HINTS (use these to personalize)
+═══════════════════════════════════════
+${buildCoachingHints()}
+
+═══════════════════════════════════════
 YOUR COACHING STYLE
 ═══════════════════════════════════════
 - Warm and encouraging, like a supportive friend who's also a dog trainer
@@ -267,6 +377,12 @@ EVERY RESPONSE SHOULD:
 2. Reference specific data when relevant (their actual progress, specific cues, patterns)
 3. Give ONE specific, actionable suggestion
 4. End with encouragement tied to their real progress
+
+PERSONALIZATION IS KEY:
+- If they're a rescue owner dealing with 2+ years of anxiety, your tone should reflect patience and long-game thinking
+- If they live in an apartment, acknowledge neighbor pressure when relevant
+- If they've tried trainers before, acknowledge that and differentiate this approach
+- Reference their specific goal (${dog.leave_duration || 'being alone comfortably'}) when motivating them
 
 NEVER:
 - Be preachy or lecture

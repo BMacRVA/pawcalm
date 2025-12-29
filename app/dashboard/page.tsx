@@ -7,6 +7,7 @@ import { useSelectedDog } from '../hooks/useSelectedDog'
 import { Button } from '../components/ui/Button'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import ProgressInsightCard from '../components/ProgressInsightCard'
+import DogProfileCard from '../components/DogProfileCard'
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -191,6 +192,11 @@ export default function DashboardPage() {
       {/* Progress Insight - Smart motivational message */}
       <div className="px-6 mb-4">
         <ProgressInsightCard dogId={dog.id} dogName={dog.name} />
+      </div>
+
+      {/* Progressive Profiling - Shows after 5 sessions */}
+      <div className="px-6 mb-4">
+        <DogProfileCard dogId={dog.id} dogName={dog.name} />
       </div>
 
       {/* Today's Status */}
