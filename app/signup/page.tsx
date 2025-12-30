@@ -18,11 +18,32 @@ function SignupContent() {
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
+    // Check if user is already logged in
+    const checkExistingSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        // Already logged in, check if they have dogs
+        const { data: dogs } = await supabase
+          .from('dogs')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .limit(1)
+
+        if (dogs && dogs.length > 0) {
+          router.push('/dashboard')
+        } else {
+          router.push('/onboarding')
+        }
+      }
+    }
+
+    checkExistingSession()
+
     const emailParam = searchParams.get('email')
     if (emailParam) {
       setEmail(emailParam)
     }
-  }, [searchParams])
+  }, [searchParams, router])
 
   const validateForm = (): string | null => {
     if (!email.trim()) {
@@ -61,12 +82,11 @@ function SignupContent() {
         email: email.trim().toLowerCase(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/verify-email`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
         }
       })
 
       if (signupError) {
-        // Handle specific error cases
         if (signupError.message.includes('already registered')) {
           setError('This email is already registered. Try logging in instead.')
         } else if (signupError.message.includes('invalid')) {
@@ -79,7 +99,6 @@ function SignupContent() {
       }
 
       if (data?.user) {
-        // Check if email confirmation is required
         if (data.user.identities?.length === 0) {
           setError('This email is already registered. Try logging in instead.')
           setLoading(false)
@@ -103,7 +122,7 @@ function SignupContent() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/onboarding`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         }
       })
 
@@ -117,7 +136,6 @@ function SignupContent() {
     }
   }
 
-  // Success state - show verification message
   if (success) {
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
@@ -153,7 +171,7 @@ function SignupContent() {
               <ol className="text-amber-700 text-sm space-y-1 list-decimal list-inside">
                 <li>Open the email from PawCalm</li>
                 <li>Click the verification link</li>
-                <li>Start helping your dog!</li>
+                <li>Set up your dog&apos;s profile</li>
               </ol>
             </div>
             <p className="text-gray-400 text-xs mt-6">
@@ -167,7 +185,6 @@ function SignupContent() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
-      {/* Nav */}
       <nav className="bg-[#FDFBF7] border-b border-amber-900/5">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
@@ -191,7 +208,6 @@ function SignupContent() {
             Start helping your dog in 5 minutes a day
           </p>
 
-          {/* Error message */}
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -199,7 +215,6 @@ function SignupContent() {
             </div>
           )}
 
-          {/* Google signup */}
           <button
             onClick={handleGoogleSignup}
             disabled={loading}
