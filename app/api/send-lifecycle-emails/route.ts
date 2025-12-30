@@ -26,7 +26,7 @@ async function getInsights(): Promise<Record<string, any>> {
 }
 
 // Format insight for email
-function formatInsightBlock(insights: Record<string, any>, type: 'welcome' | 'nudge' | 'weekSummary' | 'milestone' | 'winback'): string {
+function formatInsightBlock(insights: Record<string, any>, type: 'welcome' | 'nudge' | 'weekSummary' | 'milestone' | 'winback' | 'weeklyCheckin'): string {
   const bestTime = insights.best_practice_time
   const cues = insights.cue_difficulty
   const mastery = insights.mastery_stats
@@ -115,6 +115,19 @@ function formatInsightBlock(insights: Record<string, any>, type: 'welcome' | 'nu
             <p style="margin: 0; font-size: 14px; color: #0369a1;">
               <strong>💡 Did you know?</strong><br/>
               Most dogs master their first cue in about <strong>${mastery.avg_days_to_first_mastery} days</strong> of consistent practice. It's never too late to start again.
+            </p>
+          </div>
+        `
+      }
+      break
+
+    case 'weeklyCheckin':
+      if (consistency?.consistency_boost_pct > 0) {
+        insightHtml = `
+          <div style="background: #faf5ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #9333ea;">
+            <p style="margin: 0; font-size: 14px; color: #6b21a8;">
+              <strong>📊 Why check-ins matter:</strong><br/>
+              Owners who track weekly see <strong>${consistency.consistency_boost_pct}% better results</strong>. Your feedback helps us help you.
             </p>
           </div>
         `
@@ -334,6 +347,39 @@ const templates = {
         ${unsubscribeFooter(userId)}
       </div>
     `
+  }),
+
+  weeklyCheckin: (dogName: string, userId: string, insights: Record<string, any>) => ({
+    subject: `How's ${dogName} doing this week? 🐕`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #1a1a1a; font-size: 24px;">Quick check-in time!</h1>
+        
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          How's training going with ${dogName}? We'd love to know — it helps us help you.
+        </p>
+        
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          Takes 30 seconds. Just tap below and answer 2 quick questions.
+        </p>
+        
+        ${formatInsightBlock(insights, 'weeklyCheckin')}
+        
+        <a href="${BASE_URL}/dashboard" style="display: inline-block; background: #9333ea; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0;">
+          Check In Now
+        </a>
+        
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          Even if you haven't logged practices, your feedback matters. We want to know how ${dogName} is really doing.
+        </p>
+        
+        <p style="color: #888; font-size: 14px; margin-top: 30px;">
+          — The PawCalm Team
+        </p>
+        
+        ${unsubscribeFooter(userId)}
+      </div>
+    `
   })
 }
 
@@ -370,6 +416,21 @@ async function isOptedIn(userId: string): Promise<boolean> {
     .single()
   
   return data?.lifecycle_emails !== false
+}
+
+// Check last weekly check-in
+async function getLastCheckinDate(dogId: number): Promise<Date | null> {
+  const { data } = await supabase
+    .from('weekly_checkins')
+    .select('created_at')
+    .eq('dog_id', dogId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  
+  if (data && data.length > 0) {
+    return new Date(data[0].created_at)
+  }
+  return null
 }
 
 // Get user's dog and stats
@@ -439,6 +500,9 @@ async function getUserDogData(userId: string) {
     return masteredDate >= oneDayAgo
   }) || []
 
+  // Get last check-in date
+  const lastCheckinDate = await getLastCheckinDate(dog.id)
+
   return {
     dog,
     totalPractices,
@@ -447,7 +511,8 @@ async function getUserDogData(userId: string) {
     daysSinceLastPractice,
     masteredCount: mastered.length,
     recentlyMastered,
-    practiceDays: practiceDays.size
+    practiceDays: practiceDays.size,
+    lastCheckinDate
   }
 }
 
@@ -463,6 +528,7 @@ export async function POST(request: NextRequest) {
     weekSummary: 0,
     milestone: 0,
     winback: 0,
+    weeklyCheckin: 0,
     errors: [] as string[]
   }
 
@@ -481,7 +547,7 @@ export async function POST(request: NextRequest) {
       const userData = await getUserDogData(user.id)
       if (!userData) continue
 
-      const { dog, daysSinceLastPractice, totalPractices, calmRate, streak, masteredCount, recentlyMastered } = userData
+      const { dog, daysSinceLastPractice, totalPractices, calmRate, streak, masteredCount, recentlyMastered, lastCheckinDate } = userData
       const userCreatedDaysAgo = Math.floor((Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24))
 
       try {
@@ -564,6 +630,27 @@ export async function POST(request: NextRequest) {
             })
             await logEmail(user.id, 'winback', dog.id)
             results.winback++
+          }
+        }
+
+        // 6. Weekly check-in reminder
+        // Send if: user has 5+ practices AND (never checked in OR last check-in was 7+ days ago)
+        if (totalPractices >= 5) {
+          const sevenDaysAgo = new Date()
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+          
+          const needsCheckin = !lastCheckinDate || lastCheckinDate < sevenDaysAgo
+          
+          if (needsCheckin && !(await wasEmailSent(user.id, 'weekly_checkin', 7))) {
+            const template = templates.weeklyCheckin(dog.name, user.id, insights)
+            await resend.emails.send({
+              from: FROM_EMAIL,
+              to: user.email,
+              subject: template.subject,
+              html: template.html
+            })
+            await logEmail(user.id, 'weekly_checkin', dog.id)
+            results.weeklyCheckin++
           }
         }
 
