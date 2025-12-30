@@ -4,20 +4,26 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import { Button } from '../components/ui/Button'
-import { ChevronRight, ChevronLeft, Check } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Check, Plus, X } from 'lucide-react'
 
 const DEFAULT_CUES = [
-  { name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold them for a moment, then put them down. Don\'t make eye contact with your dog. Repeat 10 times.' },
-  { name: 'Put on shoes', icon: '👟', instructions: 'Put on your shoes slowly while your dog watches. Then sit back down. Repeat 10 times.' },
-  { name: 'Grab jacket', icon: '🧥', instructions: 'Pick up your jacket or coat, hold it, then hang it back up. Repeat 10 times.' },
-  { name: 'Touch door handle', icon: '🚪', instructions: 'Walk to the door, touch the handle, then walk away. Repeat 10 times.' },
-  { name: 'Pick up bag', icon: '👜', instructions: 'Pick up your work bag or purse, hold it briefly, set it down. Repeat 10 times.' },
+  { id: 'keys', name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold them for a moment, then put them down. Don\'t make eye contact with your dog. Repeat 10 times.' },
+  { id: 'shoes', name: 'Put on shoes', icon: '👟', instructions: 'Put on your shoes slowly while your dog watches. Then sit back down. Repeat 10 times.' },
+  { id: 'jacket', name: 'Grab jacket', icon: '🧥', instructions: 'Pick up your jacket or coat, hold it, then hang it back up. Repeat 10 times.' },
+  { id: 'door', name: 'Touch door handle', icon: '🚪', instructions: 'Walk to the door, touch the handle, then walk away. Repeat 10 times.' },
+  { id: 'bag', name: 'Pick up bag', icon: '👜', instructions: 'Pick up your work bag or purse, hold it briefly, set it down. Repeat 10 times.' },
+  { id: 'car', name: 'Car sounds', icon: '🚗', instructions: 'Jingle your car keys or press the unlock button. Don\'t go outside. Repeat 10 times.' },
+  { id: 'garage', name: 'Garage door', icon: '🏠', instructions: 'Press the garage door button, then press it again to stop. Or just hold the remote. Repeat 10 times.' },
+  { id: 'alarm', name: 'Turn off alarm', icon: '⏰', instructions: 'Walk to your alarm panel or pick up your phone as if disabling an alarm. Repeat 10 times.' },
 ]
 
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
   const [dogName, setDogName] = useState('')
+  const [selectedCues, setSelectedCues] = useState<string[]>(['keys', 'shoes', 'door'])
+  const [customCue, setCustomCue] = useState('')
+  const [customCues, setCustomCues] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleComplete = async () => {
@@ -46,17 +52,33 @@ export default function OnboardingPage() {
       return
     }
 
-    // Create default cues
-    const cuesToInsert = DEFAULT_CUES.map(cue => ({
+    // Create selected default cues
+    const defaultCuesToInsert = DEFAULT_CUES
+      .filter(cue => selectedCues.includes(cue.id))
+      .map(cue => ({
+        dog_id: dog.id,
+        name: cue.name,
+        icon: cue.icon,
+        instructions: cue.instructions,
+        success_looks_like: `${dogName} stays relaxed and doesn't react`,
+        if_struggling: 'Try doing it more slowly, or from further away from your dog',
+      }))
+
+    // Create custom cues
+    const customCuesToInsert = customCues.map(cueName => ({
       dog_id: dog.id,
-      name: cue.name,
-      icon: cue.icon,
-      instructions: cue.instructions,
+      name: cueName,
+      icon: '🎯',
+      instructions: `Perform "${cueName}" while your dog watches. Don't make eye contact. Repeat 10 times.`,
       success_looks_like: `${dogName} stays relaxed and doesn't react`,
       if_struggling: 'Try doing it more slowly, or from further away from your dog',
     }))
 
-    await supabase.from('custom_cues').insert(cuesToInsert)
+    const allCues = [...defaultCuesToInsert, ...customCuesToInsert]
+    
+    if (allCues.length > 0) {
+      await supabase.from('custom_cues').insert(allCues)
+    }
 
     // Store selected dog in localStorage
     localStorage.setItem('selectedDogId', dog.id)
@@ -64,15 +86,36 @@ export default function OnboardingPage() {
     router.push('/dashboard')
   }
 
-  const nextStep = () => setStep(s => Math.min(s + 1, 4))
+  const toggleCue = (cueId: string) => {
+    setSelectedCues(prev => 
+      prev.includes(cueId) 
+        ? prev.filter(id => id !== cueId)
+        : [...prev, cueId]
+    )
+  }
+
+  const addCustomCue = () => {
+    if (customCue.trim() && !customCues.includes(customCue.trim())) {
+      setCustomCues(prev => [...prev, customCue.trim()])
+      setCustomCue('')
+    }
+  }
+
+  const removeCustomCue = (cue: string) => {
+    setCustomCues(prev => prev.filter(c => c !== cue))
+  }
+
+  const nextStep = () => setStep(s => Math.min(s + 1, 5))
   const prevStep = () => setStep(s => Math.max(s - 1, 0))
+
+  const totalSelectedCues = selectedCues.length + customCues.length
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       {/* Progress dots */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex justify-center gap-2">
-          {[0, 1, 2, 3, 4].map(i => (
+          {[0, 1, 2, 3, 4, 5].map(i => (
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-all ${
@@ -209,13 +252,101 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 4: Dog Name */}
+        {/* Step 4: Select Cues */}
         {step === 4 && (
+          <div className="flex-1 flex flex-col">
+            <div className="text-center mb-6">
+              <span className="text-5xl mb-3 block">🎯</span>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                What triggers your dog?
+              </h1>
+              <p className="text-gray-600">
+                Select the things that make your dog anxious when you're leaving
+              </p>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {DEFAULT_CUES.map(cue => (
+                  <button
+                    key={cue.id}
+                    onClick={() => toggleCue(cue.id)}
+                    className={`p-3 rounded-xl border-2 text-left transition-all ${
+                      selectedCues.includes(cue.id)
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{cue.icon}</span>
+                      <span className={`text-sm font-medium ${
+                        selectedCues.includes(cue.id) ? 'text-amber-900' : 'text-gray-700'
+                      }`}>
+                        {cue.name.replace('Pick up ', '').replace('Put on ', '').replace('Touch ', '').replace('Grab ', '')}
+                      </span>
+                    </div>
+                    {selectedCues.includes(cue.id) && (
+                      <div className="mt-1">
+                        <Check className="w-4 h-4 text-amber-600" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom cues */}
+              {customCues.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-500 mb-2">Your custom cues:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {customCues.map(cue => (
+                      <div 
+                        key={cue}
+                        className="flex items-center gap-1 bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm"
+                      >
+                        <span>{cue}</span>
+                        <button onClick={() => removeCustomCue(cue)} className="hover:text-amber-900">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add custom cue */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customCue}
+                  onChange={(e) => setCustomCue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addCustomCue()}
+                  placeholder="Add something else..."
+                  className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-xl text-sm focus:border-amber-500 focus:outline-none"
+                />
+                <button
+                  onClick={addCustomCue}
+                  disabled={!customCue.trim()}
+                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl disabled:opacity-50 transition"
+                >
+                  <Plus className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              <p className="text-center text-gray-400 text-sm mt-4">
+                {totalSelectedCues} cue{totalSelectedCues !== 1 ? 's' : ''} selected • You can add more later
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Dog Name */}
+        {step === 5 && (
           <div className="flex-1 flex flex-col justify-center">
             <div className="text-center mb-8">
               <span className="text-6xl mb-4 block">🐾</span>
               <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                Let's get started
+                Almost there!
               </h1>
               <p className="text-gray-600 text-lg">
                 What's your dog's name?
@@ -232,7 +363,7 @@ export default function OnboardingPage() {
             />
             
             <p className="text-center text-gray-400 text-sm mt-4">
-              We'll set up 5 common departure cues to start with. You can customize later.
+              We'll set up {totalSelectedCues} cue{totalSelectedCues !== 1 ? 's' : ''} for you to practice
             </p>
           </div>
         )}
@@ -252,6 +383,21 @@ export default function OnboardingPage() {
             </Button>
             <Button onClick={nextStep} fullWidth size="lg">
               Continue
+              <ChevronRight className="w-5 h-5 ml-1" />
+            </Button>
+          </div>
+        ) : step === 4 ? (
+          <div className="flex gap-3">
+            <Button onClick={prevStep} variant="secondary" size="lg" className="px-4">
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <Button 
+              onClick={nextStep} 
+              fullWidth 
+              size="lg"
+              disabled={totalSelectedCues === 0}
+            >
+              Continue with {totalSelectedCues} cue{totalSelectedCues !== 1 ? 's' : ''}
               <ChevronRight className="w-5 h-5 ml-1" />
             </Button>
           </div>
