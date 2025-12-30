@@ -8,7 +8,8 @@ import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import { Button } from '../components/ui/Button'
 import JourneyTimeline from '../components/JourneyTimeline'
 import YourImpactCard from '../components/YourImpactCard'
-import { Loader2, Plus, Lock, Play } from 'lucide-react'
+import InsightCard from '../components/InsightCard'
+import { Loader2, Plus, Lock, Play, ChevronDown, ChevronUp } from 'lucide-react'
 
 type CueProgress = {
   id: string
@@ -29,6 +30,7 @@ export default function ProgressPage() {
   const [showAddCue, setShowAddCue] = useState(false)
   const [newCueName, setNewCueName] = useState('')
   const [adding, setAdding] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
 
   useEffect(() => {
     const loadProgress = async () => {
@@ -114,10 +116,6 @@ export default function ProgressPage() {
     }
   }, [dog])
 
-  const startPractice = () => {
-    router.push('/practice?more=true')
-  }
-
   const practiceSpecificCue = (cueId: string) => {
     router.push(`/practice?cue=${cueId}`)
   }
@@ -200,16 +198,6 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {/* Your Impact - Before/After Proof */}
-      <div className="px-6 mb-6">
-        <YourImpactCard dogId={dog?.id || ''} dogName={dog?.name || ''} />
-      </div>
-
-      {/* Journey Timeline */}
-      <div className="px-6 mb-6">
-        <JourneyTimeline dogId={dog?.id || ''} dogName={dog?.name || ''} />
-      </div>
-
       {/* Level 1: Departure Cues */}
       <div className="px-6 mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -217,19 +205,14 @@ export default function ProgressPage() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
               Level 1: Departure Cues
             </h2>
-            <p className="text-xs text-gray-400">Tap any cue to practice it</p>
+            <p className="text-xs text-gray-400">Tap any cue to practice</p>
           </div>
           <div className="bg-green-50 text-green-700 text-sm font-medium px-3 py-1 rounded-full">
             {masteredCount}/{cues.length} mastered
           </div>
         </div>
 
-        <Button onClick={startPractice} fullWidth size="lg" className="mb-4">
-          Smart Practice
-          <span className="text-amber-200 text-sm font-normal ml-2">(auto-selects)</span>
-        </Button>
-
-        {/* Cue List - Clickable */}
+        {/* Cue List - Always show play icon for mobile */}
         <div className="space-y-2">
           {cues.map(cue => {
             const isMastered = cue.calmCount >= 5
@@ -240,7 +223,7 @@ export default function ProgressPage() {
               <button
                 key={cue.id}
                 onClick={() => practiceSpecificCue(cue.id)}
-                className="w-full bg-white rounded-xl p-3 shadow-sm hover:shadow-md hover:bg-amber-50 transition-all text-left group"
+                className="w-full bg-white rounded-xl p-3 shadow-sm active:bg-amber-50 transition-all text-left"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{cue.icon || '🔑'}</span>
@@ -253,7 +236,9 @@ export default function ProgressPage() {
                         ) : (
                           <span className="text-gray-400 text-xs">{cue.calmCount}/5 calm</span>
                         )}
-                        <Play className="w-4 h-4 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                          <Play className="w-3.5 h-3.5 text-amber-600 ml-0.5" />
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -342,6 +327,38 @@ export default function ProgressPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Community Insight */}
+      <div className="px-6 mb-6">
+        <InsightCard />
+      </div>
+
+      {/* Journey Timeline - Collapsible */}
+      <div className="px-6 mb-6">
+        <button
+          onClick={() => setShowTimeline(!showTimeline)}
+          className="w-full flex items-center justify-between py-3 text-left"
+        >
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+            Journey Timeline
+          </h2>
+          {showTimeline ? (
+            <ChevronUp className="w-5 h-5 text-gray-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          )}
+        </button>
+        {showTimeline && (
+          <div className="mt-2">
+            <JourneyTimeline dogId={dog?.id || ''} dogName={dog?.name || ''} />
+          </div>
+        )}
+      </div>
+
+      {/* Your Impact - Reward at the bottom */}
+      <div className="px-6 mb-6">
+        <YourImpactCard dogId={dog?.id || ''} dogName={dog?.name || ''} />
       </div>
 
       <BottomNavSpacer />
