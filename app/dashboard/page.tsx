@@ -9,6 +9,7 @@ import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import ProgressInsightCard from '../components/ProgressInsightCard'
 import DogProfileCard from '../components/DogProfileCard'
 import InsightCard from '../components/InsightCard'
+import WeeklyCheckinCard from '../components/WeeklyCheckinCard'
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const [totalCues, setTotalCues] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showDogPicker, setShowDogPicker] = useState(false)
+  const [showWeeklyCheckin, setShowWeeklyCheckin] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -115,6 +117,24 @@ export default function DashboardPage() {
       else if (currentStreak < 7) setTodaysGoal(4)
       else setTodaysGoal(5)
 
+      // Check if we should show weekly check-in (after 5+ practices, if no check-in in 7 days)
+      if ((totalEver || 0) >= 5) {
+        const { data: lastCheckin } = await supabase
+          .from('weekly_checkins')
+          .select('created_at')
+          .eq('dog_id', dog.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+        if (!lastCheckin || lastCheckin.length === 0 || 
+            new Date(lastCheckin[0].created_at) < sevenDaysAgo) {
+          setShowWeeklyCheckin(true)
+        }
+      }
+
       setLoading(false)
     }
 
@@ -135,9 +155,9 @@ export default function DashboardPage() {
     setShowDogPicker(false)
   }
 
- const addNewDog = () => {
-  router.push('/onboarding?add=true')
-}
+  const addNewDog = () => {
+    router.push('/onboarding?add=true')
+  }
 
   if (dogLoading || loading) {
     return (
@@ -189,6 +209,18 @@ export default function DashboardPage() {
           </div>
         )}
       </header>
+
+      {/* Weekly Check-in - Shows if due */}
+      {showWeeklyCheckin && (
+        <div className="px-6 mb-4">
+          <WeeklyCheckinCard 
+            dogId={dog.id} 
+            dogName={dog.name}
+            onComplete={() => setShowWeeklyCheckin(false)}
+            onDismiss={() => setShowWeeklyCheckin(false)}
+          />
+        </div>
+      )}
 
       {/* Progress Insight - Personalized motivational message */}
       <div className="px-6 mb-4">
