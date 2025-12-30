@@ -12,6 +12,119 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM_EMAIL = 'PawCalm <hello@pawcalm.ai>'
 const BASE_URL = 'https://pawcalm.ai'
 
+// Fetch aggregate insights
+async function getInsights(): Promise<Record<string, any>> {
+  const { data } = await supabase
+    .from('aggregate_insights')
+    .select('insight_key, insight_value')
+  
+  const insights: Record<string, any> = {}
+  data?.forEach(row => {
+    insights[row.insight_key] = row.insight_value
+  })
+  return insights
+}
+
+// Format insight for email
+function formatInsightBlock(insights: Record<string, any>, type: 'welcome' | 'nudge' | 'weekSummary' | 'milestone' | 'winback'): string {
+  const bestTime = insights.best_practice_time
+  const cues = insights.cue_difficulty
+  const mastery = insights.mastery_stats
+  const consistency = insights.consistency_stats
+
+  let insightHtml = ''
+
+  switch (type) {
+    case 'welcome':
+      if (bestTime?.time && bestTime?.calm_rate) {
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+              <strong>💡 Tip from our data:</strong><br/>
+              Dogs are ${bestTime.calm_rate}% calmer during <strong>${bestTime.time}</strong> sessions. Try practicing then!
+            </p>
+          </div>
+        `
+      }
+      break
+
+    case 'nudge':
+      if (consistency?.consistency_boost_pct > 0) {
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+              <strong>📊 What our data shows:</strong><br/>
+              Owners who practice 3+ days per week see a <strong>${consistency.consistency_boost_pct}% higher calm rate</strong>. Just a few minutes today keeps the progress going.
+            </p>
+          </div>
+        `
+      } else if (cues?.hardest?.[0]) {
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+              <strong>💡 Quick tip:</strong><br/>
+              "${cues.hardest[0].name}" is the toughest cue for most dogs. If your pup struggles with it, you're not alone — keep at it!
+            </p>
+          </div>
+        `
+      }
+      break
+
+    case 'weekSummary':
+      const tips: string[] = []
+      if (bestTime?.time) {
+        tips.push(`Dogs are calmest in the <strong>${bestTime.time}</strong> (${bestTime.calm_rate}% calm rate)`)
+      }
+      if (cues?.most_mastered?.[0]) {
+        tips.push(`"${cues.most_mastered[0].name}" is the most commonly mastered cue`)
+      }
+      if (consistency?.consistency_boost_pct > 0) {
+        tips.push(`Consistent owners see <strong>${consistency.consistency_boost_pct}% better results</strong>`)
+      }
+      
+      if (tips.length > 0) {
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0 0 8px; font-size: 14px; color: #0369a1; font-weight: bold;">📊 What's working for PawCalm owners:</p>
+            <ul style="margin: 0; padding-left: 20px; color: #0369a1; font-size: 14px;">
+              ${tips.map(tip => `<li style="margin: 4px 0;">${tip}</li>`).join('')}
+            </ul>
+          </div>
+        `
+      }
+      break
+
+    case 'milestone':
+      if (mastery?.pct_dogs_with_mastery) {
+        const pctAhead = 100 - mastery.pct_dogs_with_mastery
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+              <strong>🎯 Fun fact:</strong><br/>
+              Only ${mastery.pct_dogs_with_mastery}% of dogs have mastered a cue. You're ahead of ${pctAhead}% of the pack!
+            </p>
+          </div>
+        `
+      }
+      break
+
+    case 'winback':
+      if (mastery?.avg_days_to_first_mastery) {
+        insightHtml = `
+          <div style="background: #f0f9ff; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+              <strong>💡 Did you know?</strong><br/>
+              Most dogs master their first cue in about <strong>${mastery.avg_days_to_first_mastery} days</strong> of consistent practice. It's never too late to start again.
+            </p>
+          </div>
+        `
+      }
+      break
+  }
+
+  return insightHtml
+}
+
 // Unsubscribe footer
 const unsubscribeFooter = (userId: string) => `
   <p style="color: #999; font-size: 12px; margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
@@ -21,7 +134,7 @@ const unsubscribeFooter = (userId: string) => `
 
 // Email templates
 const templates = {
-  welcome: (dogName: string, userId: string) => ({
+  welcome: (dogName: string, userId: string, insights: Record<string, any>) => ({
     subject: `Welcome to PawCalm! Let's help ${dogName} 🐕`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -34,6 +147,8 @@ const templates = {
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Here's what works: <strong>small, daily practice</strong>. Even 5 minutes a day makes a difference.
         </p>
+        
+        ${formatInsightBlock(insights, 'welcome')}
         
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Your first goal: <strong>3 practices today</strong>. Open the app and tap "Start Practice" to begin.
@@ -56,7 +171,7 @@ const templates = {
     `
   }),
 
-  nudge: (dogName: string, daysSince: number, userId: string) => ({
+  nudge: (dogName: string, daysSince: number, userId: string, insights: Record<string, any>) => ({
     subject: `${dogName} misses practicing with you`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -70,6 +185,8 @@ const templates = {
           But here's the thing about separation anxiety training: <strong>consistency beats intensity</strong>. 
           A few minutes today is better than an hour next week.
         </p>
+        
+        ${formatInsightBlock(insights, 'nudge')}
         
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           ${dogName} is waiting. Just one practice session today?
@@ -88,7 +205,7 @@ const templates = {
     `
   }),
 
-  weekSummary: (dogName: string, stats: { practices: number; calmRate: number; streak: number; mastered: number }, userId: string) => ({
+  weekSummary: (dogName: string, stats: { practices: number; calmRate: number; streak: number; mastered: number }, userId: string, insights: Record<string, any>) => ({
     subject: `${dogName}'s week in review 📊`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -123,6 +240,8 @@ const templates = {
           </p>
         ` : ''}
         
+        ${formatInsightBlock(insights, 'weekSummary')}
+        
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Week 2 tip: Focus on the cues where ${dogName} still reacts. Repetition builds confidence.
         </p>
@@ -140,7 +259,7 @@ const templates = {
     `
   }),
 
-  milestone: (dogName: string, cueName: string, masteredCount: number, userId: string) => ({
+  milestone: (dogName: string, cueName: string, masteredCount: number, userId: string, insights: Record<string, any>) => ({
     subject: `🎉 ${dogName} mastered "${cueName}"!`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -161,6 +280,8 @@ const templates = {
           That's not luck — that's real progress you built together.
         </p>
         
+        ${formatInsightBlock(insights, 'milestone')}
+        
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Keep going. The next cue is waiting.
         </p>
@@ -178,7 +299,7 @@ const templates = {
     `
   }),
 
-  winback: (dogName: string, daysSince: number, userId: string) => ({
+  winback: (dogName: string, daysSince: number, userId: string, insights: Record<string, any>) => ({
     subject: `We miss you (and so does ${dogName}'s progress)`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -191,6 +312,8 @@ const templates = {
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           The good news? <strong>You can pick up where you left off.</strong> ${dogName}'s progress is saved, and every practice counts — even after a break.
         </p>
+        
+        ${formatInsightBlock(insights, 'winback')}
         
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Start small. One practice today. That's it.
@@ -246,7 +369,6 @@ async function isOptedIn(userId: string): Promise<boolean> {
     .eq('user_id', userId)
     .single()
   
-  // Default to opted in if no preference set
   return data?.lifecycle_emails !== false
 }
 
@@ -261,7 +383,6 @@ async function getUserDogData(userId: string) {
   
   if (!dog) return null
 
-  // Get practice stats
   const { data: practices } = await supabase
     .from('cue_practices')
     .select('created_at, cues')
@@ -273,7 +394,6 @@ async function getUserDogData(userId: string) {
     .select('name, calm_count, mastered_at')
     .eq('dog_id', dog.id)
   
-  // Calculate stats
   let totalPractices = 0
   let totalCalm = 0
   const practiceDays = new Set<string>()
@@ -291,7 +411,6 @@ async function getUserDogData(userId: string) {
     ? Math.floor((Date.now() - new Date(lastPracticeDate).getTime()) / (1000 * 60 * 60 * 24))
     : null
 
-  // Calculate streak
   let streak = 0
   const today = new Date().toISOString().split('T')[0]
   const checkDate = new Date()
@@ -333,7 +452,6 @@ async function getUserDogData(userId: string) {
 }
 
 export async function POST(request: NextRequest) {
-  // Verify cron secret (optional security)
   const authHeader = request.headers.get('authorization')
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -349,26 +467,28 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Get aggregate insights
+    const insights = await getInsights()
+    
     // Get all users
     const { data: users } = await supabase.auth.admin.listUsers()
     
     for (const user of users.users) {
       if (!user.email || user.email.includes('test')) continue
       
-      // Check opt-in status
       if (!(await isOptedIn(user.id))) continue
 
       const userData = await getUserDogData(user.id)
       if (!userData) continue
 
-      const { dog, daysSinceLastPractice, totalPractices, calmRate, streak, masteredCount, recentlyMastered, practiceDays } = userData
+      const { dog, daysSinceLastPractice, totalPractices, calmRate, streak, masteredCount, recentlyMastered } = userData
       const userCreatedDaysAgo = Math.floor((Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24))
 
       try {
-        // 1. Welcome email (day 0, hasn't practiced yet)
+        // 1. Welcome email
         if (userCreatedDaysAgo === 0 && totalPractices === 0) {
           if (!(await wasEmailSent(user.id, 'welcome'))) {
-            const template = templates.welcome(dog.name, user.id)
+            const template = templates.welcome(dog.name, user.id, insights)
             await resend.emails.send({
               from: FROM_EMAIL,
               to: user.email,
@@ -380,10 +500,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 2. Nudge email (3 days inactive, but has practiced before)
+        // 2. Nudge email
         if (daysSinceLastPractice !== null && daysSinceLastPractice >= 3 && daysSinceLastPractice < 14 && totalPractices > 0) {
-          if (!(await wasEmailSent(user.id, 'nudge', 7))) { // Don't send more than once per week
-            const template = templates.nudge(dog.name, daysSinceLastPractice, user.id)
+          if (!(await wasEmailSent(user.id, 'nudge', 7))) {
+            const template = templates.nudge(dog.name, daysSinceLastPractice, user.id, insights)
             await resend.emails.send({
               from: FROM_EMAIL,
               to: user.email,
@@ -395,7 +515,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 3. Week summary (day 7)
+        // 3. Week summary
         if (userCreatedDaysAgo === 7) {
           if (!(await wasEmailSent(user.id, 'week_summary'))) {
             const template = templates.weekSummary(dog.name, {
@@ -403,7 +523,7 @@ export async function POST(request: NextRequest) {
               calmRate,
               streak,
               mastered: masteredCount
-            }, user.id)
+            }, user.id, insights)
             await resend.emails.send({
               from: FROM_EMAIL,
               to: user.email,
@@ -415,12 +535,12 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 4. Milestone email (mastered a cue in last 24 hours)
+        // 4. Milestone email
         if (recentlyMastered.length > 0) {
           const cue = recentlyMastered[0]
           const milestoneKey = `milestone_${cue.name}`
           if (!(await wasEmailSent(user.id, milestoneKey))) {
-            const template = templates.milestone(dog.name, cue.name, masteredCount, user.id)
+            const template = templates.milestone(dog.name, cue.name, masteredCount, user.id, insights)
             await resend.emails.send({
               from: FROM_EMAIL,
               to: user.email,
@@ -432,10 +552,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 5. Win-back email (14+ days inactive)
+        // 5. Win-back email
         if (daysSinceLastPractice !== null && daysSinceLastPractice >= 14) {
-          if (!(await wasEmailSent(user.id, 'winback', 30))) { // Only once per month
-            const template = templates.winback(dog.name, daysSinceLastPractice, user.id)
+          if (!(await wasEmailSent(user.id, 'winback', 30))) {
+            const template = templates.winback(dog.name, daysSinceLastPractice, user.id, insights)
             await resend.emails.send({
               from: FROM_EMAIL,
               to: user.email,
@@ -467,7 +587,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Also support GET for easy testing
 export async function GET(request: NextRequest) {
   return POST(request)
 }
