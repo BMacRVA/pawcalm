@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { BottomNav, BottomNavSpacer } from '../components/layout/BottomNav'
 import ProgressInsightCard from '../components/ProgressInsightCard'
 import DogProfileCard from '../components/DogProfileCard'
+import InsightCard from '../components/InsightCard'
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -189,17 +190,17 @@ export default function DashboardPage() {
         )}
       </header>
 
-      {/* Progress Insight - Smart motivational message */}
+      {/* Progress Insight - Personalized motivational message */}
       <div className="px-6 mb-4">
         <ProgressInsightCard dogId={dog.id} dogName={dog.name} />
       </div>
 
-      {/* Progressive Profiling - Shows after 5 sessions */}
+      {/* Progressive Profiling - Shows after 5 sessions, asks one question */}
       <div className="px-6 mb-4">
         <DogProfileCard dogId={dog.id} dogName={dog.name} />
       </div>
 
-      {/* Today's Status */}
+      {/* Today's Status - Primary action area */}
       <div className="px-6 mb-6">
         <div className={`rounded-2xl p-5 ${completed ? 'bg-green-50' : 'bg-amber-50'}`}>
           <div className="flex items-center justify-between mb-3">
@@ -245,6 +246,11 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-500">Mastered</p>
           </div>
         </div>
+      </div>
+
+      {/* Community Insight - Aggregate data tip (below stats, feels contextual) */}
+      <div className="px-6 mb-6">
+        <InsightCard />
       </div>
 
       {/* Quick Links */}
