@@ -52,9 +52,14 @@ export default function LandingPage() {
             <span className="font-semibold text-amber-950 text-xl tracking-tight">PawCalm</span>
             <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">BETA</span>
           </div>
-          <Link href="/signup" className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-all">
-            Start Free
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-amber-700 hover:text-amber-800 text-sm font-medium">
+              Log in
+            </Link>
+            <Link href="/signup" className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-all">
+              Start Free
+            </Link>
+          </div>
         </div>
       </nav>
 
