@@ -57,7 +57,7 @@ export default function InsightCard() {
         pool.push(`Dogs are ${rate}% calmer during ${time} sessions. Try practicing then!`)
       }
 
-      if (insights.consistency_stats?.consistency_boost_pct > 0) {
+      if (insights.consistency_stats?.consistency_boost_pct && insights.consistency_stats.consistency_boost_pct > 0) {
         const boost = insights.consistency_stats.consistency_boost_pct
         pool.push(`Owners who practice 3+ days/week see ${boost}% better results.`)
       }
