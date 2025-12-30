@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../supabase'
 import { Button } from '../components/ui/Button'
-import { ChevronRight, ChevronLeft, Check, Plus, X } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Check, Plus, X, Loader2 } from 'lucide-react'
 
 const DEFAULT_CUES = [
   { id: 'keys', name: 'Pick up keys', icon: '🔑', instructions: 'Pick up your keys, hold them for a moment, then put them down. Don\'t make eye contact with your dog. Repeat 10 times.' },
@@ -17,14 +17,24 @@ const DEFAULT_CUES = [
   { id: 'alarm', name: 'Turn off alarm', icon: '⏰', instructions: 'Walk to your alarm panel or pick up your phone as if disabling an alarm. Repeat 10 times.' },
 ]
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isAddingDog = searchParams.get('add') === 'true'
+  
   const [step, setStep] = useState(0)
   const [dogName, setDogName] = useState('')
   const [selectedCues, setSelectedCues] = useState<string[]>(['keys', 'shoes', 'door'])
   const [customCue, setCustomCue] = useState('')
   const [customCues, setCustomCues] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+
+  // If adding another dog, skip to cue selection (step 4)
+  useEffect(() => {
+    if (isAddingDog) {
+      setStep(4)
+    }
+  }, [isAddingDog])
 
   const handleComplete = async () => {
     if (!dogName.trim()) return
@@ -106,24 +116,38 @@ export default function OnboardingPage() {
   }
 
   const nextStep = () => setStep(s => Math.min(s + 1, 5))
-  const prevStep = () => setStep(s => Math.max(s - 1, 0))
+  const prevStep = () => {
+    // If adding a dog and on step 4, go back to dashboard instead
+    if (isAddingDog && step === 4) {
+      router.push('/dashboard')
+      return
+    }
+    setStep(s => Math.max(s - 1, 0))
+  }
 
   const totalSelectedCues = selectedCues.length + customCues.length
+
+  // Calculate progress dots - show fewer if adding dog
+  const totalSteps = isAddingDog ? 2 : 6
+  const currentStepIndex = isAddingDog ? (step === 4 ? 0 : 1) : step
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col">
       {/* Progress dots */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex justify-center gap-2">
-          {[0, 1, 2, 3, 4, 5].map(i => (
+          {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-all ${
-                i === step ? 'w-6 bg-amber-500' : i < step ? 'bg-amber-500' : 'bg-gray-200'
+                i === currentStepIndex ? 'w-6 bg-amber-500' : i < currentStepIndex ? 'bg-amber-500' : 'bg-gray-200'
               }`}
             />
           ))}
         </div>
+        {isAddingDog && (
+          <p className="text-center text-gray-500 text-sm mt-2">Adding another dog</p>
+        )}
       </div>
 
       {/* Content */}
@@ -258,10 +282,10 @@ export default function OnboardingPage() {
             <div className="text-center mb-6">
               <span className="text-5xl mb-3 block">🎯</span>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                What triggers your dog?
+                {isAddingDog ? 'What triggers this dog?' : 'What triggers your dog?'}
               </h1>
               <p className="text-gray-600">
-                Select the things that make your dog anxious when you're leaving
+                Select the things that make {isAddingDog ? 'them' : 'your dog'} anxious when you're leaving
               </p>
             </div>
             
@@ -346,10 +370,10 @@ export default function OnboardingPage() {
             <div className="text-center mb-8">
               <span className="text-6xl mb-4 block">🐾</span>
               <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                Almost there!
+                {isAddingDog ? 'What\'s this dog\'s name?' : 'Almost there!'}
               </h1>
               <p className="text-gray-600 text-lg">
-                What's your dog's name?
+                {isAddingDog ? 'Enter the name of your other dog' : 'What\'s your dog\'s name?'}
               </p>
             </div>
             
@@ -412,12 +436,12 @@ export default function OnboardingPage() {
               size="lg"
               disabled={!dogName.trim() || loading}
             >
-              {loading ? 'Setting up...' : `Start helping ${dogName || 'your dog'}`}
+              {loading ? 'Setting up...' : isAddingDog ? `Add ${dogName || 'dog'}` : `Start helping ${dogName || 'your dog'}`}
             </Button>
           </div>
         )}
         
-        {step > 0 && step < 4 && (
+        {step > 0 && step < 4 && !isAddingDog && (
           <button 
             onClick={() => setStep(4)}
             className="w-full text-center text-gray-400 text-sm mt-4 py-2"
@@ -427,5 +451,17 @@ export default function OnboardingPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
   )
 }

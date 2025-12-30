@@ -135,9 +135,9 @@ export default function DashboardPage() {
     setShowDogPicker(false)
   }
 
-  const addNewDog = () => {
-    router.push('/onboarding')
-  }
+ const addNewDog = () => {
+  router.push('/onboarding?add=true')
+}
 
   if (dogLoading || loading) {
     return (
