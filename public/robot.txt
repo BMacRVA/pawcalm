@@ -1,0 +1,10 @@
+# Allow all crawlers
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://pawcalm.ai/sitemap.xml
+
+# Disallow admin/api routes
+Disallow: /api/
+Disallow: /auth/
