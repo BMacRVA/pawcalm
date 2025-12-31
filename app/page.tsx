@@ -7,7 +7,11 @@ import { supabase } from './supabase';
 export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [stats, setStats] = useState({ dogsEnrolled: 0 });
+  const [stats, setStats] = useState({ 
+    practices: 0, 
+    cuesMastered: 0,
+    calmRate: 0
+  });
 
   useEffect(() => {
     const handleAuthRedirect = async () => {
@@ -28,8 +32,32 @@ export default function LandingPage() {
 
   useEffect(() => {
     async function fetchStats() {
-      const { count } = await supabase.from('dogs').select('*', { count: 'exact', head: true })
-      setStats({ dogsEnrolled: count || 0 })
+      // Get total practices and calculate calm rate
+      const { data: practices } = await supabase
+        .from('cue_practices')
+        .select('cues')
+      
+      let totalReps = 0
+      let calmReps = 0
+      
+      practices?.forEach(p => {
+        p.cues?.forEach((c: { response: string }) => {
+          totalReps++
+          if (c.response === 'calm') calmReps++
+        })
+      })
+      
+      // Get mastered cues count
+      const { count: masteredCount } = await supabase
+        .from('custom_cues')
+        .select('*', { count: 'exact', head: true })
+        .gte('calm_count', 5)
+      
+      setStats({ 
+        practices: totalReps,
+        cuesMastered: masteredCount || 0,
+        calmRate: totalReps > 0 ? Math.round((calmReps / totalReps) * 100) : 0
+      })
     }
     fetchStats()
   }, [])
@@ -121,16 +149,24 @@ export default function LandingPage() {
                 Free during beta • No credit card required
               </p>
 
-              {stats.dogsEnrolled > 0 && (
-                <div className="mt-4 inline-flex items-center gap-2 text-sm text-amber-800">
-                  <span className="flex -space-x-1">
-                    {['🐕', '🐶', '🦮'].slice(0, Math.min(stats.dogsEnrolled, 3)).map((emoji, i) => (
-                      <span key={i} className="w-6 h-6 rounded-full bg-amber-100 border-2 border-white flex items-center justify-center text-xs">
-                        {emoji}
-                      </span>
-                    ))}
-                  </span>
-                  <span><strong>{stats.dogsEnrolled}</strong> dog{stats.dogsEnrolled !== 1 && 's'} enrolled</span>
+              {stats.practices > 0 && (
+                <div className="mt-4 inline-flex flex-wrap items-center gap-3 text-sm text-amber-800">
+                  <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-full">
+                    <span>🎯</span>
+                    <span><strong>{stats.practices}</strong> practices logged</span>
+                  </div>
+                  {stats.cuesMastered > 0 && (
+                    <div className="flex items-center gap-1.5 bg-green-50 px-3 py-1.5 rounded-full text-green-800">
+                      <span>✓</span>
+                      <span><strong>{stats.cuesMastered}</strong> cues mastered</span>
+                    </div>
+                  )}
+                  {stats.calmRate > 0 && (
+                    <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-full text-blue-800">
+                      <span>😎</span>
+                      <span><strong>{stats.calmRate}%</strong> calm rate</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
