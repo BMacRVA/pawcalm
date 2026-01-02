@@ -98,12 +98,12 @@ export default function LandingPage() {
             {/* Left: Hero */}
             <div className="lg:flex-1 text-center lg:text-left">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-950 tracking-tight leading-tight mb-4">
-                Help your anxious dog
-                <span className="block text-amber-600">in 5 min/day</span>
+                Science-backed training for
+                <span className="block text-amber-600">separation anxiety</span>
               </h1>
-              
+
               <p className="text-base sm:text-lg text-amber-800/70 mb-6 max-w-md mx-auto lg:mx-0">
-                Practice simple cues. Track progress. Get guidance from an AI coach who knows your dog.
+                Based on proven methods from certified trainers. Track daily progress, get AI guidance, and help your dog feel calm when you leave.
               </p>
 
               {/* How it works */}

@@ -1,13 +1,43 @@
 import OpenAI from 'openai'
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
 export async function POST(request: Request) {
   try {
+    // Authenticate the request
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { dog } = await request.json()
+
+    // Verify the dog belongs to this user
+    const { data: dogData, error: dogError } = await supabase
+      .from('dogs')
+      .select('user_id')
+      .eq('id', dog.id)
+      .single()
+
+    if (dogError || !dogData || dogData.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden - dog does not belong to user' }, { status: 403 })
+    }
 
     const triggers = dog.triggers?.length > 0 
       ? dog.triggers.join(', ') 

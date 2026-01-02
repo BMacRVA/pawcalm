@@ -63,14 +63,17 @@ export default function JournalPage() {
     }])
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
       const response = await fetch('/api/journal-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           dogId: dog.id,
-          userId: user?.id,
           message: userMessage
         })
       })

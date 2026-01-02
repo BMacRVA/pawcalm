@@ -46,20 +46,43 @@ setInterval(() => {
 
 export async function POST(request: NextRequest) {
   try {
-    const { dogId, message, userId } = await request.json()
+    // Authenticate the request
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { dogId, message } = await request.json()
 
     if (!dogId || !message) {
       return NextResponse.json({ error: 'Missing dogId or message' }, { status: 400 })
     }
 
-    // Rate limit check
-    const rateLimitKey = userId || dogId || 'anonymous'
-    const { allowed, remaining } = checkRateLimit(rateLimitKey)
-    
+    // Verify the dog belongs to this authenticated user
+    const { data: dogData, error: dogError } = await supabase
+      .from('dogs')
+      .select('user_id')
+      .eq('id', dogId)
+      .single()
+
+    if (dogError || !dogData || dogData.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden - dog does not belong to user' }, { status: 403 })
+    }
+
+    // Rate limit check using authenticated user ID
+    const { allowed, remaining } = checkRateLimit(user.id)
+
     if (!allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please wait a minute before sending more messages.' },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Remaining': '0',
@@ -408,7 +431,7 @@ USE THEIR DATA: You have detailed stats about ${dog.name}. Reference specific cu
     // Save to database
     await supabase.from('journal_entries').insert({
       dog_id: dogId,
-      user_id: userId,
+      user_id: user.id,
       content: message,
       ai_response: aiResponse,
       mood: 'neutral',

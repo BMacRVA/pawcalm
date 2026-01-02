@@ -180,6 +180,33 @@ export default function HowItWorksPage() {
           </p>
         </div>
 
+        {/* About */}
+        <div className="bg-white border border-amber-200 rounded-2xl p-8 mb-16">
+          <h2 className="text-2xl font-bold text-amber-950 mb-4">Why I built this</h2>
+          <div className="space-y-4 text-amber-800/80">
+            <p>
+              I&apos;m a dog lover and software developer who saw a massive gap in accessible separation anxiety training.
+              While I haven&apos;t personally experienced this with my own dogs, I&apos;ve watched friends struggle to find affordable help
+              for what I learned is one of the most common behavioral issues affecting millions of dogs.
+            </p>
+            <p>
+              I researched the science behind separation anxiety treatment and discovered that the <strong>departure cue
+              desensitization method</strong> — developed and proven by certified veterinary behaviorists and trainers —
+              works incredibly well when done consistently. The problem? It requires daily tracking, personalized guidance,
+              and staying motivated through setbacks.
+            </p>
+            <p>
+              PawCalm doesn&apos;t replace professional trainers or veterinary behaviorists. Instead, it makes their proven
+              methods accessible to everyone by providing structure, progress tracking, and AI-powered guidance to help you
+              stay consistent. Think of it as a companion tool that helps you implement expert protocols between training sessions.
+            </p>
+            <p className="text-amber-700 font-medium">
+              I&apos;m not a certified trainer, and I don&apos;t claim to be. I&apos;m someone who believes every dog deserves
+              to feel calm, and every owner deserves access to science-backed methods that work.
+            </p>
+          </div>
+        </div>
+
         {/* CTA */}
         <div className="text-center bg-amber-950 rounded-2xl p-8">
           <h2 className="text-2xl font-bold text-white mb-2">Ready to help your dog?</h2>
