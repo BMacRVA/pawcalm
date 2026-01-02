@@ -103,7 +103,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="text-base sm:text-lg text-amber-800/70 mb-6 max-w-md mx-auto lg:mx-0">
-                Based on proven methods from certified trainers. Track daily progress, get AI guidance, and help your dog feel calm when you leave.
+                Based on proven desensitization methods used by certified trainers. Track daily progress, get AI guidance, and help your dog feel calm when you leave.
               </p>
 
               {/* How it works */}
