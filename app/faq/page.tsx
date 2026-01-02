@@ -16,7 +16,7 @@ const faqs = [
     category: 'About PawCalm',
     questions: [
       { q: "How is this different from YouTube videos?", a: "YouTube gives generic advice. PawCalm creates a personalized sequence of exercises based on YOUR dog's specific triggers and progress. We track what's working and automatically adjust your missions." },
-      { q: "Is the AI actually helpful?", a: "Our AI is trained on proven desensitization and counter-conditioning techniques used by professional behaviorists. It creates structured, progressive missions—but it's not a replacement for professional help with severe cases." },
+      { q: "Is the AI actually helpful?", a: "Our AI provides suggestions based on desensitization and counter-conditioning principles. However, AI-generated content is for informational purposes only and is not a substitute for professional veterinary or certified behaviorist advice." },
       { q: "What are the trainer videos?", a: "Short demonstration videos from certified dog behaviorists showing exactly how to perform each technique. See proper timing, body language, and reward delivery." }
     ]
   },

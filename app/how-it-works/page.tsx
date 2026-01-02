@@ -30,15 +30,32 @@ export default function HowItWorksPage() {
           A simple, science-backed approach to helping your dog overcome separation anxiety
         </p>
 
+        {/* Disclaimer Banner */}
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 mb-8">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h2 className="text-lg font-semibold text-red-900 mb-2">Important: Not Professional Advice</h2>
+              <p className="text-red-800 text-sm mb-2">
+                PawCalm provides AI-generated suggestions for informational purposes only. This is not a substitute for
+                professional veterinary care or certified animal behaviorist consultation.
+              </p>
+              <Link href="/disclaimer" className="text-red-700 underline text-sm font-medium hover:text-red-900">
+                Read full disclaimer →
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {/* The Science */}
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-12">
           <h2 className="text-lg font-semibold text-blue-900 mb-3">💡 The Science</h2>
           <p className="text-blue-800/80 mb-3">
-            Dogs with separation anxiety often react to <strong>departure cues</strong> — the things you do before leaving, 
+            Dogs with separation anxiety often react to <strong>departure cues</strong> — the things you do before leaving,
             like picking up keys, putting on shoes, or touching the door handle.
           </p>
           <p className="text-blue-800/80">
-            By practicing these cues <strong>without actually leaving</strong>, your dog learns they don&apos;t always mean 
+            By practicing these cues <strong>without actually leaving</strong>, your dog learns they don&apos;t always mean
             goodbye. This is called <strong>desensitization</strong>, and it&apos;s the gold standard in treating separation anxiety.
           </p>
         </div>
@@ -201,8 +218,11 @@ export default function HowItWorksPage() {
               stay consistent. Think of it as a companion tool that helps you implement expert protocols between training sessions.
             </p>
             <p className="text-amber-700 font-medium">
-              I&apos;m not a certified trainer, and I don&apos;t claim to be. I&apos;m someone who believes every dog deserves
-              to feel calm, and every owner deserves access to science-backed methods that work.
+              I&apos;m not a certified trainer, veterinarian, or animal behaviorist, and I don&apos;t claim to be.
+              I&apos;m someone who believes every dog deserves to feel calm, and every owner deserves access to
+              science-backed methods that work. Please see our{' '}
+              <Link href="/disclaimer" className="underline hover:text-amber-900">disclaimer</Link> for important
+              information about PawCalm&apos;s limitations.
             </p>
           </div>
         </div>

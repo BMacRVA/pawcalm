@@ -13,6 +13,7 @@ function SignupContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -61,7 +62,11 @@ function SignupContent() {
     if (password !== confirmPassword) {
       return 'Passwords do not match'
     }
-    
+
+    if (!acceptedTerms) {
+      return 'You must accept the terms to continue'
+    }
+
     return null
   }
 
@@ -282,9 +287,26 @@ function SignupContent() {
               />
             </div>
 
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                />
+                <span className="text-sm text-gray-700">
+                  I understand that PawCalm provides AI-generated suggestions for <strong>informational purposes only</strong> and is not a substitute for professional veterinary or certified behaviorist advice. I agree to the{' '}
+                  <Link href="/terms" className="text-amber-700 underline hover:text-amber-900">Terms</Link>
+                  {' '}and{' '}
+                  <Link href="/disclaimer" className="text-amber-700 underline hover:text-amber-900">Disclaimer</Link>.
+                </span>
+              </label>
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !acceptedTerms}
               className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -303,13 +325,6 @@ function SignupContent() {
             <Link href="/login" className="text-amber-600 hover:text-amber-700 font-medium">
               Log in
             </Link>
-          </p>
-
-          <p className="text-center text-gray-400 text-xs mt-4">
-            By signing up, you agree to our{' '}
-            <Link href="/terms" className="underline hover:text-gray-600">Terms</Link>
-            {' '}and{' '}
-            <Link href="/privacy" className="underline hover:text-gray-600">Privacy Policy</Link>
           </p>
         </div>
       </main>
