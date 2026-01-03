@@ -227,7 +227,7 @@ export default function LandingPage() {
         {/* How It Works Section */}
         <div className="max-w-6xl mx-auto px-4 py-16 border-t border-amber-200">
           <h2 className="text-2xl sm:text-3xl font-bold text-amber-950 text-center mb-3">
-            How It Works
+            Training Best Practices
           </h2>
           <p className="text-center text-amber-800/70 mb-12 max-w-2xl mx-auto">
             Based on proven desensitization methods used by certified trainers worldwide
