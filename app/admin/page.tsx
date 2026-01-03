@@ -36,12 +36,62 @@ type Insights = {
   }
 }
 
+type UserAnalytics = {
+  overview: {
+    totalUsers: number
+    usersToday: number
+    usersThisWeek: number
+    usersThisMonth: number
+    activeThisWeek: number
+    activeThisMonth: number
+    churnRisk: number
+  }
+  funnel: {
+    signedUp: number
+    createdDog: number
+    practicedOnce: number
+    usedJournal: number
+    activationRate: number
+    practiceRate: number
+    journalRate: number
+  }
+  growth: {
+    signupsByDay: { date: string; count: number }[]
+  }
+  cohorts: {
+    week: string
+    signups: number
+    activationRate: number
+    practiceRate: number
+    week1RetentionRate: number
+  }[]
+  recentUsers: {
+    email: string
+    signupDate: string
+    hasDog: boolean
+    dogCount: number
+    practiceCount: number
+    journalCount: number
+    lastActivity: string | null
+    daysSinceSignup: number
+  }[]
+  featureUsage: {
+    totalPractices: number
+    totalJournalMessages: number
+    totalCheckins: number
+    avgPracticesPerUser: number
+    avgJournalPerUser: number
+  }
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
+  const [userAnalytics, setUserAnalytics] = useState<UserAnalytics | null>(null)
+  const [activeTab, setActiveTab] = useState<'insights' | 'users'>('insights')
   const [error, setError] = useState('')
 
   const authenticate = async (e: React.FormEvent) => {
@@ -50,17 +100,28 @@ export default function AdminPage() {
     setError('')
 
     try {
-      const response = await fetch('/api/admin/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      })
+      const [statsResponse, analyticsResponse] = await Promise.all([
+        fetch('/api/admin/stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }),
+        fetch('/api/admin/user-analytics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }),
+      ])
 
-      if (response.ok) {
-        const data = await response.json()
+      if (statsResponse.ok && analyticsResponse.ok) {
+        const [statsData, analyticsData] = await Promise.all([
+          statsResponse.json(),
+          analyticsResponse.json(),
+        ])
         setAuthenticated(true)
-        setStats(data.stats)
-        setInsights(data.insights)
+        setStats(statsData.stats)
+        setInsights(statsData.insights)
+        setUserAnalytics(analyticsData)
       } else {
         setError('Invalid password')
       }
@@ -96,7 +157,7 @@ export default function AdminPage() {
     )
   }
 
-  if (!stats || !insights) {
+  if (!stats || !insights || !userAnalytics) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <p className="text-gray-400">Loading data...</p>
@@ -114,8 +175,8 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-900 py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-white">🔬 PawCalm Research Dashboard</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-white">🔬 PawCalm Admin Dashboard</h1>
           <button
             onClick={() => setAuthenticated(false)}
             className="text-gray-400 hover:text-white text-sm"
@@ -124,15 +185,41 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <MetricCard label="Total Dogs" value={stats.totalDogs} />
-          <MetricCard label="Active Dogs" value={stats.activeDogs} color="green" />
-          <MetricCard label="Active This Week" value={stats.activeThisWeek} color="blue" />
-          <MetricCard label="Total Practices" value={stats.totalPractices} />
-          <MetricCard label="Overall Calm Rate" value={`${insights.keyMetrics.overallCalmRate}%`} color="green" />
-          <MetricCard label="Avg Practices/Dog" value={insights.keyMetrics.avgPracticesPerActiveDog} />
+        {/* Tab Navigation */}
+        <div className="flex gap-4 mb-8 border-b border-gray-700">
+          <button
+            onClick={() => setActiveTab('insights')}
+            className={`pb-3 px-4 font-medium transition-colors ${
+              activeTab === 'insights'
+                ? 'text-amber-500 border-b-2 border-amber-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Product Insights
+          </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`pb-3 px-4 font-medium transition-colors ${
+              activeTab === 'users'
+                ? 'text-amber-500 border-b-2 border-amber-500'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            User Analytics
+          </button>
         </div>
+
+        {activeTab === 'insights' && (
+          <>
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+              <MetricCard label="Total Dogs" value={stats.totalDogs} />
+              <MetricCard label="Active Dogs" value={stats.activeDogs} color="green" />
+              <MetricCard label="Active This Week" value={stats.activeThisWeek} color="blue" />
+              <MetricCard label="Total Practices" value={stats.totalPractices} />
+              <MetricCard label="Overall Calm Rate" value={`${insights.keyMetrics.overallCalmRate}%`} color="green" />
+              <MetricCard label="Avg Practices/Dog" value={insights.keyMetrics.avgPracticesPerActiveDog} />
+            </div>
 
         {/* Hypotheses */}
         <div className="bg-gray-800 rounded-xl p-6 mb-8">
@@ -245,6 +332,220 @@ export default function AdminPage() {
             )}
           </div>
         </div>
+          </>
+        )}
+
+        {activeTab === 'users' && (
+          <>
+            {/* User Overview Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+              <MetricCard label="Total Users" value={userAnalytics.overview.totalUsers} />
+              <MetricCard label="Today" value={userAnalytics.overview.usersToday} color="blue" />
+              <MetricCard label="This Week" value={userAnalytics.overview.usersThisWeek} color="blue" />
+              <MetricCard label="This Month" value={userAnalytics.overview.usersThisMonth} color="blue" />
+              <MetricCard label="Active (Week)" value={userAnalytics.overview.activeThisWeek} color="green" />
+              <MetricCard label="Active (Month)" value={userAnalytics.overview.activeThisMonth} color="green" />
+              <MetricCard label="Churn Risk" value={userAnalytics.overview.churnRisk} color="red" />
+            </div>
+
+            {/* User Funnel */}
+            <div className="bg-gray-800 rounded-xl p-6 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6">👥 User Activation Funnel</h2>
+              <div className="space-y-4">
+                <FunnelStep
+                  label="Signed Up"
+                  value={userAnalytics.funnel.signedUp}
+                  total={userAnalytics.funnel.signedUp}
+                  isFirst
+                />
+                <FunnelStep
+                  label="Created Dog Profile"
+                  value={userAnalytics.funnel.createdDog}
+                  total={userAnalytics.funnel.signedUp}
+                  percent={userAnalytics.funnel.activationRate}
+                />
+                <FunnelStep
+                  label="Completed First Practice"
+                  value={userAnalytics.funnel.practicedOnce}
+                  total={userAnalytics.funnel.signedUp}
+                  percent={userAnalytics.funnel.practiceRate}
+                />
+                <FunnelStep
+                  label="Used AI Coach"
+                  value={userAnalytics.funnel.usedJournal}
+                  total={userAnalytics.funnel.signedUp}
+                  percent={userAnalytics.funnel.journalRate}
+                />
+              </div>
+            </div>
+
+            {/* Growth Chart & Cohorts */}
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-gray-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">📈 Signups (Last 30 Days)</h3>
+                <div className="h-48 flex items-end justify-between gap-1">
+                  {userAnalytics.growth.signupsByDay.slice(-14).map((day, i) => {
+                    const maxCount = Math.max(...userAnalytics.growth.signupsByDay.map(d => d.count), 1)
+                    const height = (day.count / maxCount) * 100
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center">
+                        <div
+                          className="w-full bg-amber-500 rounded-t hover:bg-amber-400 transition-colors"
+                          style={{ height: `${height}%` }}
+                          title={`${day.date}: ${day.count} signups`}
+                        />
+                        <span className="text-xs text-gray-400 mt-2 transform -rotate-45 origin-top-left">
+                          {day.date.slice(5)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-gray-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">📊 Feature Usage</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Practices</span>
+                    <span className="text-white font-semibold">{userAnalytics.featureUsage.totalPractices}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Coach Messages</span>
+                    <span className="text-white font-semibold">{userAnalytics.featureUsage.totalJournalMessages}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Check-ins</span>
+                    <span className="text-white font-semibold">{userAnalytics.featureUsage.totalCheckins}</span>
+                  </div>
+                  <div className="h-px bg-gray-700 my-3" />
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Avg Practices/User</span>
+                    <span className="text-amber-400 font-semibold">{userAnalytics.featureUsage.avgPracticesPerUser}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Avg Coach Messages/User</span>
+                    <span className="text-amber-400 font-semibold">{userAnalytics.featureUsage.avgJournalPerUser}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cohort Analysis */}
+            <div className="bg-gray-800 rounded-xl p-6 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6">📅 Cohort Analysis (Last 12 Weeks)</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-700">
+                      <th className="text-left pb-3 pr-4">Week</th>
+                      <th className="text-right pb-3 pr-4">Signups</th>
+                      <th className="text-right pb-3 pr-4">Activation %</th>
+                      <th className="text-right pb-3 pr-4">Practice %</th>
+                      <th className="text-right pb-3 pr-4">Week 1 Retention</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userAnalytics.cohorts.map((cohort, i) => (
+                      <tr key={i} className="border-b border-gray-700/50">
+                        <td className="py-3 pr-4 text-gray-300">{cohort.week}</td>
+                        <td className="py-3 pr-4 text-right text-white">{cohort.signups}</td>
+                        <td className="py-3 pr-4 text-right">
+                          <span className={cohort.activationRate >= 70 ? 'text-green-400' : cohort.activationRate >= 40 ? 'text-yellow-400' : 'text-red-400'}>
+                            {cohort.activationRate}%
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-right">
+                          <span className={cohort.practiceRate >= 50 ? 'text-green-400' : cohort.practiceRate >= 30 ? 'text-yellow-400' : 'text-red-400'}>
+                            {cohort.practiceRate}%
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-right">
+                          <span className={cohort.week1RetentionRate >= 40 ? 'text-green-400' : cohort.week1RetentionRate >= 20 ? 'text-yellow-400' : 'text-red-400'}>
+                            {cohort.week1RetentionRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Recent Users */}
+            <div className="bg-gray-800 rounded-xl p-6">
+              <h2 className="text-2xl font-bold text-white mb-6">🆕 Recent Signups</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-700">
+                      <th className="text-left pb-3 pr-4">Email</th>
+                      <th className="text-center pb-3 pr-4">Days Ago</th>
+                      <th className="text-center pb-3 pr-4">Has Dog</th>
+                      <th className="text-right pb-3 pr-4">Practices</th>
+                      <th className="text-right pb-3 pr-4">Coach</th>
+                      <th className="text-right pb-3 pr-4">Last Active</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userAnalytics.recentUsers.map((user, i) => (
+                      <tr key={i} className="border-b border-gray-700/50">
+                        <td className="py-3 pr-4 text-gray-300 truncate max-w-xs">{user.email}</td>
+                        <td className="py-3 pr-4 text-center text-white">{user.daysSinceSignup}d</td>
+                        <td className="py-3 pr-4 text-center">
+                          {user.hasDog ? <span className="text-green-400">✓</span> : <span className="text-gray-500">—</span>}
+                        </td>
+                        <td className="py-3 pr-4 text-right text-white">{user.practiceCount}</td>
+                        <td className="py-3 pr-4 text-right text-white">{user.journalCount}</td>
+                        <td className="py-3 pr-4 text-right text-gray-400 text-xs">
+                          {user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FunnelStep({
+  label,
+  value,
+  total,
+  percent,
+  isFirst,
+}: {
+  label: string
+  value: number
+  total: number
+  percent?: number
+  isFirst?: boolean
+}) {
+  const width = total > 0 ? (value / total) * 100 : 0
+
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-300">{label}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-white font-semibold">{value}</span>
+          {!isFirst && percent !== undefined && (
+            <span className={`text-xs font-medium ${percent >= 50 ? 'text-green-400' : percent >= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {percent}%
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="bg-gray-700 rounded-full h-3 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${isFirst ? 'bg-amber-500' : 'bg-blue-500'}`}
+          style={{ width: `${width}%` }}
+        />
       </div>
     </div>
   )
