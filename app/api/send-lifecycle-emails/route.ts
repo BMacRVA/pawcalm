@@ -312,38 +312,107 @@ const templates = {
     `
   }),
 
-  winback: (dogName: string, daysSince: number, userId: string, insights: Record<string, any>) => ({
+  winback1: (dogName: string, daysSince: number, userId: string, insights: Record<string, any>) => ({
     subject: `We miss you (and so does ${dogName}'s progress)`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h1 style="color: #1a1a1a; font-size: 24px;">It's been ${daysSince} days</h1>
-        
+
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Separation anxiety training is hard. Really hard. If you stepped away, that's okay.
         </p>
-        
+
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           The good news? <strong>You can pick up where you left off.</strong> ${dogName}'s progress is saved, and every practice counts — even after a break.
         </p>
-        
+
         ${formatInsightBlock(insights, 'winback')}
-        
+
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           Start small. One practice today. That's it.
         </p>
-        
+
         <a href="${BASE_URL}/practice" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0;">
           Start Again
         </a>
-        
+
         <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
           If something's not working or you have questions, just reply to this email. We read everything.
         </p>
-        
+
         <p style="color: #888; font-size: 14px; margin-top: 30px;">
           — The PawCalm Team
         </p>
-        
+
+        ${unsubscribeFooter(userId)}
+      </div>
+    `
+  }),
+
+  winback2: (dogName: string, daysSince: number, userId: string, insights: Record<string, any>) => ({
+    subject: `Last check: Is PawCalm working for you and ${dogName}?`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #1a1a1a; font-size: 24px;">Honest question</h1>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          It's been a month since your last practice. We're wondering: <strong>Is PawCalm not working for you?</strong>
+        </p>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          If ${dogName}'s anxiety hasn't improved, or if something about the app is frustrating, we genuinely want to know.
+          Reply to this email and tell us what's not working.
+        </p>
+
+        ${formatInsightBlock(insights, 'winback')}
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          But if you're just busy and plan to come back — we get it. Your progress is waiting whenever you're ready.
+        </p>
+
+        <a href="${BASE_URL}/practice" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0;">
+          Pick Up Where You Left Off
+        </a>
+
+        <p style="color: #888; font-size: 14px; margin-top: 30px;">
+          — The PawCalm Team
+        </p>
+
+        ${unsubscribeFooter(userId)}
+      </div>
+    `
+  }),
+
+  winback3: (dogName: string, userId: string) => ({
+    subject: `Final email: We're here if you need us`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #1a1a1a; font-size: 24px;">This is our last email</h1>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          We haven't seen you in over 60 days, so we're going to stop sending emails and give you some space.
+        </p>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          <strong>But your account is still active.</strong> ${dogName}'s data is safe, and you can log back in anytime.
+        </p>
+
+        <a href="${BASE_URL}/login" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 20px 0;">
+          Log Back In
+        </a>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          If ${dogName}'s anxiety got better without PawCalm — that's great! We're happy for you both.
+        </p>
+
+        <p style="color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+          And if you ever decide to try again, we'll be here.
+        </p>
+
+        <p style="color: #888; font-size: 14px; margin-top: 30px;">
+          — The PawCalm Team
+        </p>
+
         ${unsubscribeFooter(userId)}
       </div>
     `
@@ -618,18 +687,53 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 5. Win-back email
-        if (daysSinceLastPractice !== null && daysSinceLastPractice >= 14) {
-          if (!(await wasEmailSent(user.id, 'winback', 30))) {
-            const template = templates.winback(dog.name, daysSinceLastPractice, user.id, insights)
-            await resend.emails.send({
-              from: FROM_EMAIL,
-              to: user.email,
-              subject: template.subject,
-              html: template.html
-            })
-            await logEmail(user.id, 'winback', dog.id)
-            results.winback++
+        // 5. Progressive win-back sequence with hard stop
+        if (daysSinceLastPractice !== null) {
+          // Stop all emails after 90 days of inactivity
+          if (daysSinceLastPractice >= 90) {
+            // Do nothing - hard stop
+          }
+          // Win-back #3: 60-89 days inactive
+          else if (daysSinceLastPractice >= 60) {
+            if (!(await wasEmailSent(user.id, 'winback3'))) {
+              const template = templates.winback3(dog.name, user.id)
+              await resend.emails.send({
+                from: FROM_EMAIL,
+                to: user.email,
+                subject: template.subject,
+                html: template.html
+              })
+              await logEmail(user.id, 'winback3', dog.id)
+              results.winback++
+            }
+          }
+          // Win-back #2: 30-59 days inactive
+          else if (daysSinceLastPractice >= 30) {
+            if (!(await wasEmailSent(user.id, 'winback2'))) {
+              const template = templates.winback2(dog.name, daysSinceLastPractice, user.id, insights)
+              await resend.emails.send({
+                from: FROM_EMAIL,
+                to: user.email,
+                subject: template.subject,
+                html: template.html
+              })
+              await logEmail(user.id, 'winback2', dog.id)
+              results.winback++
+            }
+          }
+          // Win-back #1: 14-29 days inactive
+          else if (daysSinceLastPractice >= 14) {
+            if (!(await wasEmailSent(user.id, 'winback1'))) {
+              const template = templates.winback1(dog.name, daysSinceLastPractice, user.id, insights)
+              await resend.emails.send({
+                from: FROM_EMAIL,
+                to: user.email,
+                subject: template.subject,
+                html: template.html
+              })
+              await logEmail(user.id, 'winback1', dog.id)
+              results.winback++
+            }
           }
         }
 
