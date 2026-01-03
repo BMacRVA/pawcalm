@@ -223,6 +223,156 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* How It Works Section */}
+        <div className="max-w-6xl mx-auto px-4 py-16 border-t border-amber-200">
+          <h2 className="text-2xl sm:text-3xl font-bold text-amber-950 text-center mb-3">
+            How It Works
+          </h2>
+          <p className="text-center text-amber-800/70 mb-12 max-w-2xl mx-auto">
+            Based on proven desensitization methods used by certified trainers worldwide
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-8 mb-12">
+            {/* Do's Column */}
+            <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-green-900 mb-4 flex items-center gap-2">
+                <span className="text-2xl">✅</span>
+                Do This
+              </h3>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <span className="text-green-600 font-bold mt-0.5">•</span>
+                  <span className="text-green-900">Practice departure cues <strong>without leaving</strong> (keys, shoes, door)</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-green-600 font-bold mt-0.5">•</span>
+                  <span className="text-green-900">Start with just <strong>5 minutes daily</strong> — consistency beats duration</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-green-600 font-bold mt-0.5">•</span>
+                  <span className="text-green-900">Log every response honestly (calm, noticed, anxious)</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-green-600 font-bold mt-0.5">•</span>
+                  <span className="text-green-900">Build up gradually as your dog shows improvement</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-green-600 font-bold mt-0.5">•</span>
+                  <span className="text-green-900">Celebrate small wins — every calm reaction counts</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Don'ts Column */}
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-red-900 mb-4 flex items-center gap-2">
+                <span className="text-2xl">❌</span>
+                Avoid This
+              </h3>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <span className="text-red-600 font-bold mt-0.5">•</span>
+                  <span className="text-red-900">Don't rush — this takes <strong>weeks, not days</strong></span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-red-600 font-bold mt-0.5">•</span>
+                  <span className="text-red-900">Don't practice when you're stressed or in a hurry</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-red-600 font-bold mt-0.5">•</span>
+                  <span className="text-red-900">Don't punish or scold anxious reactions</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-red-600 font-bold mt-0.5">•</span>
+                  <span className="text-red-900">Don't skip days — <strong>consistency is everything</strong></span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-red-600 font-bold mt-0.5">•</span>
+                  <span className="text-red-900">Don't progress too fast before cues are mastered</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Why It Works */}
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6 mb-12">
+            <h3 className="text-lg font-bold text-blue-900 mb-3 flex items-center gap-2">
+              <span className="text-2xl">🧠</span>
+              Why This Works
+            </h3>
+            <p className="text-blue-900 mb-3">
+              <strong>Desensitization & Counter-Conditioning</strong> — the gold standard approach developed by veterinary behaviorists. By practicing departure cues without actually leaving, your dog learns these actions don't always mean goodbye.
+            </p>
+            <p className="text-blue-800">
+              Over time, the anxiety response weakens and your dog stays calm when you grab your keys, put on shoes, or touch the door handle. It's proven science, made simple and trackable.
+            </p>
+          </div>
+
+          {/* Mobile App Preview */}
+          <div className="lg:hidden mb-12">
+            <h3 className="text-xl font-bold text-amber-950 text-center mb-6">What You'll See</h3>
+
+            {/* Practice Preview */}
+            <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100 mb-4 max-w-md mx-auto">
+              <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-4 text-white">
+                <p className="text-amber-200 text-xs font-medium">Daily Practice</p>
+                <h3 className="text-lg font-bold">Quick Cue Training</h3>
+              </div>
+
+              <div className="p-4">
+                <div className="text-center mb-4">
+                  <span className="text-4xl">🔑</span>
+                  <p className="font-semibold text-gray-900 mt-2">Pick up your keys</p>
+                  <p className="text-sm text-gray-500">How did your dog react?</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-200">
+                    <span className="text-2xl">😎</span>
+                    <span className="font-medium text-green-800">Calm</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                    <span className="text-2xl">🙂</span>
+                    <span className="font-medium text-amber-800">Noticed</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-200">
+                    <span className="text-2xl">😰</span>
+                    <span className="font-medium text-red-800">Anxious</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Coach Preview */}
+            <div className="bg-white rounded-2xl shadow-lg shadow-amber-900/10 overflow-hidden border border-amber-100 max-w-md mx-auto">
+              <div className="p-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span>💬</span>
+                  <span className="font-semibold text-gray-900">AI Coach</span>
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="bg-gray-100 rounded-2xl rounded-bl-md p-3 max-w-[85%]">
+                  <p className="text-sm text-gray-700">
+                    Great progress! Your dog stayed calm 4 times today. Try the shoe cue next — it&apos;s often easier after keys. 🎉
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Final CTA */}
+          <div className="text-center">
+            <Link
+              href="/signup"
+              className="inline-block bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all hover:scale-105"
+            >
+              Start Free Today →
+            </Link>
+            <p className="text-amber-700/60 text-sm mt-3">Free during beta • No credit card required</p>
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
